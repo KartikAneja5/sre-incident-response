@@ -20,16 +20,21 @@ from openai import OpenAI
 # Environment Variables
 # ═══════════════════════════════════════════════════════════
 
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1" or "https://api.openai.com/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct" or "gpt-4o-mini"
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+# STRICT FIX FOR THE VALIDATOR PROXY ERROR
+API_KEY = os.environ.get("API_KEY", os.environ.get("HF_TOKEN"))
+ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
 
 # ═══════════════════════════════════════════════════════════
 # OpenAI Client
 # ═══════════════════════════════════════════════════════════
 
-client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+# Natively initialize OpenAI precisely according to the hackathon's "HOW TO FIX" specifications
+client = OpenAI(
+    base_url=os.environ.get("API_BASE_URL", API_BASE_URL), 
+    api_key=os.environ.get("API_KEY", API_KEY)
+)
 
 # ═══════════════════════════════════════════════════════════
 # System Prompt

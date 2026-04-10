@@ -25,21 +25,24 @@ from openai import OpenAI
 # Environment Variables
 # ═══════════════════════════════════════════════════════════
 
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"   # ← ONLY HF_TOKEN, no fallback
+# CRITICAL: API_KEY must be checked FIRST — the validator injects it.
+# HF_TOKEN is set as a Space secret and would bypass the proxy if checked first.
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 
 # ═══════════════════════════════════════════════════════════
-# OpenAI Client
+# OpenAI Client — MUST use os.environ per validator HOW TO FIX
 # ═══════════════════════════════════════════════════════════
 
 if not API_KEY:
-    print("WARNING: No API key found. Default missing.", flush=True)
+    print("WARNING: No API key found (neither API_KEY nor HF_TOKEN set).", flush=True)
 
-
-
-client = OpenAI(base_url=os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"), api_key=API_KEY)
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=API_KEY,
+)
 
 # ═══════════════════════════════════════════════════════════
 # System Prompt

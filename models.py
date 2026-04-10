@@ -64,7 +64,9 @@ class StateModel(BaseModel):
 class ResetRequest(BaseModel):
     """Request body for the /reset endpoint."""
 
-    task_id: str = Field(description="ID of the task to start")
+    task_id: Optional[str] = Field(
+        default=None, description="ID of the task to start"
+    )
 
 
 class TaskInfo(BaseModel):

@@ -3,9 +3,9 @@ FastAPI application for the SRE Incident Response OpenEnv environment.
 All endpoints are implemented per the OpenEnv specification.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -720,15 +720,30 @@ def health_check() -> Dict[str, str]:
 
 
 @app.post("/reset", response_model=ObservationModel, tags=["environment"])
-def reset_environment(request: ResetRequest) -> ObservationModel:
+def reset_environment(
+    task_id: Optional[str] = Query(None, description="Task ID as query param"),
+    request: Optional[ResetRequest] = Body(None),
+) -> ObservationModel:
     """
     Reset the environment for a new episode.
 
-    Accepts a task_id and returns the initial observation.
+    Accepts task_id as a query parameter or in the request body.
+    Returns the initial observation.
     All previous state is cleared — no state leakage between episodes.
     """
+    # Resolve task_id: query param > body field > default to first task
+    resolved_task_id = task_id
+    if resolved_task_id is None and request is not None and request.task_id is not None:
+        resolved_task_id = request.task_id
+    if resolved_task_id is None:
+        # Default to the first available task
+        tasks = env.get_tasks()
+        if tasks:
+            resolved_task_id = tasks[0].id
+        else:
+            raise HTTPException(status_code=400, detail="No tasks available")
     try:
-        observation = env.reset(request.task_id)
+        observation = env.reset(resolved_task_id)
         return observation
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

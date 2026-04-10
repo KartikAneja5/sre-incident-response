@@ -40,6 +40,30 @@ app.add_middleware(
 env = SREEnvironment()
 
 
+@app.get("/", tags=["system"])
+def root() -> Dict[str, Any]:
+    """Root endpoint — environment overview."""
+    return {
+        "name": "SRE Incident Response — OpenEnv Environment",
+        "version": "1.0.0",
+        "status": "running",
+        "description": (
+            "An OpenEnv environment where AI agents act as on-call SRE engineers. "
+            "Agents must triage alerts, diagnose root causes, apply fixes, and write "
+            "postmortems for realistic synthetic infrastructure incidents."
+        ),
+        "endpoints": {
+            "docs": "/docs",
+            "health": "/health",
+            "tasks": "/tasks",
+            "reset": "/reset  [POST]",
+            "step": "/step  [POST]",
+            "state": "/state",
+        },
+        "tasks": [t.model_dump() for t in env.get_tasks()],
+    }
+
+
 @app.get("/health", tags=["system"])
 def health_check() -> Dict[str, str]:
     """Health check endpoint. Always returns 200."""

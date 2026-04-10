@@ -34,7 +34,6 @@ IGNORE_PATTERNS = [
     "__pycache__/**",
     ".git/**",
     ".env",
-    "uv.lock",
     "*.pyc",
     "deploy_hf.py",
 ]

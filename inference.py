@@ -23,7 +23,7 @@ from openai import OpenAI
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 # STRICT FIX FOR THE VALIDATOR PROXY ERROR
-API_KEY = os.environ.get("API_KEY", os.environ.get("HF_TOKEN"))
+HF_TOKEN = os.getenv("HF_TOKEN")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
 
 # ═══════════════════════════════════════════════════════════
@@ -32,8 +32,8 @@ ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
 
 # Natively initialize OpenAI precisely according to the hackathon's "HOW TO FIX" specifications
 client = OpenAI(
-    base_url=os.environ.get("API_BASE_URL", API_BASE_URL), 
-    api_key=os.environ.get("API_KEY", API_KEY)
+    base_url=API_BASE_URL, 
+    api_key=HF_TOKEN
 )
 
 # ═══════════════════════════════════════════════════════════

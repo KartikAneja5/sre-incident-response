@@ -79,9 +79,15 @@ class BaseGrader:
 
     @property
     def total_reward(self) -> float:
-        """Calculate total reward: sum of scores minus penalties, clamped to [0.0, 1.0]."""
+        """Calculate total reward: sum of scores minus penalties, clamped to (0, 1) exclusive."""
         raw = sum(self.scores.values()) - self.penalties
-        return max(0.0, min(1.0, raw))
+        # Validator requires strictly between 0 and 1 (not 0.0 and not 1.0)
+        clamped = max(0.0, min(1.0, raw))
+        if clamped <= 0.0:
+            return 0.01
+        if clamped >= 1.0:
+            return 0.99
+        return clamped
 
     @property
     def breakdown(self) -> Dict[str, float]:

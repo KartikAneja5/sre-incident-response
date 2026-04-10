@@ -24,20 +24,20 @@ load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 
 # ═══════════════════════════════════════════════════════════
 # OpenAI Client
 # ═══════════════════════════════════════════════════════════
 
-if not HF_TOKEN:
-    print("WARNING: No API key found. Set HF_TOKEN or OPENAI_API_KEY environment variable.")
+if not API_KEY:
+    print("WARNING: No API key found. Set API_KEY, HF_TOKEN or OPENAI_API_KEY environment variable.")
     print("Falling back to dummy mode — actions will be hardcoded.")
 
 client: Optional[OpenAI] = None
-if HF_TOKEN:
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+if API_KEY:
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 # ═══════════════════════════════════════════════════════════
 # System Prompt
@@ -276,7 +276,7 @@ def main() -> None:
     print(f"Model: {MODEL_NAME}")
     print(f"API Base: {API_BASE_URL}")
     print(f"Environment: {ENV_BASE_URL}")
-    print(f"API Key: {'set' if HF_TOKEN else 'NOT SET (using fallback)'}")
+    print(f"API Key: {'set' if API_KEY else 'NOT SET (using fallback)'}")
     print("=" * 60)
     print()
 

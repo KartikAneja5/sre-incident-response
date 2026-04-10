@@ -1,0 +1,42 @@
+name: sre-incident-response
+version: "1.0.0"
+description: >
+  An OpenEnv environment where AI agents act as on-call SRE engineers.
+  Agents must triage alerts, diagnose root causes, apply fixes, and write
+  postmortems for realistic synthetic infrastructure incidents.
+author: "Kartik"
+tags:
+  - openenv
+  - sre
+  - incident-response
+  - devops
+  - real-world
+tasks:
+  - id: alert_triage
+    name: Alert Triage
+    difficulty: easy
+    max_steps: 8
+    description: Classify 5 simultaneous alerts and identify the root cause alert
+  - id: root_cause_diagnosis
+    name: Root Cause Diagnosis
+    difficulty: medium
+    max_steps: 10
+    description: Diagnose a payment service outage caused by a bad deploy and slow query
+  - id: full_incident_runbook
+    name: Full Incident Runbook
+    difficulty: hard
+    max_steps: 15
+    description: Handle a 3-service cascade failure from Redis OOM to mobile login outage
+observation_space:
+  logs: "List[str] — recent log lines"
+  metrics: "Dict[str, float] — service metrics"
+  active_alerts: "List[str] — firing alerts"
+  task_goal: "str — agent objective"
+  available_actions: "List[str] — valid action types"
+action_space:
+  action_type: "str — one of: acknowledge_alert, diagnose, run_query, apply_fix, escalate, write_postmortem, noop"
+  value: "str — action target or content"
+api:
+  reset: POST /reset
+  step: POST /step
+  state: GET /state

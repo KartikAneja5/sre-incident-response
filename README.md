@@ -1,3 +1,19 @@
+---
+title: SRE Incident Response
+emoji: 🚨
+colorFrom: red
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+tags:
+  - openenv
+  - sre
+  - incident-response
+  - devops
+---
+
 # SRE Incident Response — OpenEnv Environment
 
 An AI agent environment where agents act as on-call SRE (Site Reliability Engineering) engineers. Agents receive realistic synthetic server logs, metrics, and alerts and must triage, diagnose, fix, and document production incidents.

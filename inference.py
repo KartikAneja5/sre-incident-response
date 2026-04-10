@@ -25,8 +25,8 @@ from openai import OpenAI
 # Environment Variables
 # ═══════════════════════════════════════════════════════════
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN     = os.getenv("HF_TOKEN")   # ← ONLY HF_TOKEN, no fallback
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 

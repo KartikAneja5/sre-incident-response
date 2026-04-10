@@ -231,7 +231,7 @@ def main() -> None:
     print(f"Model:       {MODEL_NAME}",                        flush=True)
     print(f"API Base:    {API_BASE_URL}",                      flush=True)
     print(f"Environment: {ENV_BASE_URL}",                      flush=True)
-    print(f"API Key:     {'set' if HF_TOKEN else 'NOT SET'}", flush=True)
+    print(f"API Key:     {'set' if API_KEY else 'NOT SET'}", flush=True)
     print("=" * 60, flush=True)
 
     results: List[Dict[str, Any]] = []

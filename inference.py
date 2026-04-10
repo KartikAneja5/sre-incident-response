@@ -25,19 +25,21 @@ from openai import OpenAI
 # Environment Variables
 # ═══════════════════════════════════════════════════════════
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN     = os.getenv("HF_TOKEN")   # ← ONLY HF_TOKEN, no fallback
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+API_KEY = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN")   # ← ONLY HF_TOKEN, no fallback
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 
 # ═══════════════════════════════════════════════════════════
 # OpenAI Client
 # ═══════════════════════════════════════════════════════════
 
-if not HF_TOKEN:
-    print("WARNING: No API key found. Set HF_TOKEN environment variable.", flush=True)
+if not API_KEY:
+    print("WARNING: No API key found. Default missing.", flush=True)
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+
+
+client = OpenAI(base_url=os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"), api_key=API_KEY)
 
 # ═══════════════════════════════════════════════════════════
 # System Prompt

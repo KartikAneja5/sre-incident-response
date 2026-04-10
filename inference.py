@@ -15,8 +15,6 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from openai import OpenAI
-from dotenv import load_dotenv
-load_dotenv()
 
 # ═══════════════════════════════════════════════════════════
 # Environment Variables
@@ -246,9 +244,9 @@ def run_task(task_id: str) -> Dict[str, Any]:
         final_reward = reward
 
         # Truncate value for display
-        display_value = action["value"][:80].replace("\n", " ")
+        display_value = action["value"][:80].replace("\n", " ").replace("'", "")
         print(
-            f"[STEP]  step={step_count} "
+            f"[STEP] step={step_count} "
             f"action={action['action_type']}('{display_value}') "
             f"reward={reward:.2f} done={str(done).lower()} "
             f"error={error if error else 'null'}"
@@ -256,8 +254,8 @@ def run_task(task_id: str) -> Dict[str, Any]:
 
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END]   success={str(success).lower()} "
-        f"steps={step_count} rewards={rewards_str}"
+        f"[END] success={str(success).lower()} "
+        f"steps={step_count} score={final_reward:.2f} rewards={rewards_str}"
     )
 
     return {
@@ -270,42 +268,18 @@ def run_task(task_id: str) -> Dict[str, Any]:
 
 
 def main() -> None:
-    """Run all 3 tasks sequentially and print a summary table."""
-    print("=" * 60)
-    print("SRE Incident Response — Baseline Inference Agent")
-    print(f"Model: {MODEL_NAME}")
-    print(f"API Base: {API_BASE_URL}")
-    print(f"Environment: {ENV_BASE_URL}")
-    print(f"API Key: {'set' if API_KEY else 'NOT SET (using fallback)'}")
-    print("=" * 60)
-    print()
-
+    """Run all 3 tasks sequentially."""
     results: List[Dict[str, Any]] = []
 
     for task_id in TASK_IDS:
         result = run_task(task_id)
         results.append(result)
-        print()
-
-    # Print summary table
-    print("BASELINE RESULTS SUMMARY")
-    print("=" * 60)
-    print(f"{'Task':<25} | {'Steps':>5} | {'Final Reward':>12} | {'Success':>7}")
-    print("-" * 60)
 
     total_reward = 0.0
     for r in results:
-        task_display = r["task_id"]
-        steps = r["steps"]
-        reward = r["final_reward"]
-        success_str = str(r["success"]).lower()
-        total_reward += reward
-        print(f"{task_display:<25} | {steps:>5} | {reward:>12.2f} | {success_str:>7}")
+        total_reward += r["final_reward"]
 
     avg_reward = total_reward / len(results) if results else 0.0
-    print("=" * 60)
-    print(f"Average Score: {avg_reward:.2f}")
-    print()
 
 
 if __name__ == "__main__":

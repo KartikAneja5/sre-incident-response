@@ -25,7 +25,7 @@ tasks:
   - id: full_incident_runbook
     name: Full Incident Runbook
     difficulty: hard
-    max_steps: 15
+    max_steps: 20
     description: Handle a 3-service cascade failure from Redis OOM to mobile login outage
 observation_space:
   logs: "List[str] — recent log lines"

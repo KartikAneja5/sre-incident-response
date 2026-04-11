@@ -1,17 +1,22 @@
+# FIXED: [FIX 1] Thread-safe sessions, [FIX 2] /health, [FIX 3] root JSON fallback,
+#        [FIX 4] /metrics endpoint, [FIX 5] /reset returns session_id
 """
 FastAPI application for the SRE Incident Response OpenEnv environment.
 All endpoints are implemented per the OpenEnv specification.
 """
 
+import uuid
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from environment import SREEnvironment
 from models import (
     ActionModel,
+    MetricsModel,
     ObservationModel,
     ResetRequest,
     StateModel,
@@ -37,8 +42,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global environment instance
-env = SREEnvironment()
+# ═══════════════════════════════════════════════════════════
+# Session Management — replaces the single global env instance
+# ═══════════════════════════════════════════════════════════
+
+sessions: OrderedDict[str, SREEnvironment] = OrderedDict()
+MAX_SESSIONS = 50
+
+# Module-level stats (reset when server restarts)
+_stats: Dict[str, Any] = {
+    "total_resets": 0,
+    "total_steps": 0,
+    "total_episodes_completed": 0,
+    "rewards_history": [],  # last 100 final rewards
+}
+
+
+def get_or_create_session(session_id: Optional[str] = None) -> tuple:
+    """Retrieve an existing session by ID, or return the most recent session."""
+    if session_id and session_id in sessions:
+        return session_id, sessions[session_id]
+    # Return most recent session if exists
+    if sessions:
+        sid = next(reversed(sessions))
+        return sid, sessions[sid]
+    raise RuntimeError("No active session. Call /reset first.")
+
+
+def create_session() -> tuple:
+    """Create a new session with a unique ID and an SREEnvironment instance."""
+    sid = str(uuid.uuid4())
+    env = SREEnvironment()
+    sessions[sid] = env
+    # Cleanup old sessions
+    while len(sessions) > MAX_SESSIONS:
+        sessions.popitem(last=False)
+    return sid, env
 
 
 LANDING_PAGE_HTML = """
@@ -571,7 +610,7 @@ LANDING_PAGE_HTML = """
           company-wide login outage. Fix the cascade and write the postmortem.
         </p>
         <div class="task-meta">
-          <span>&#x23F1; 15 max steps</span>
+          <span>&#x23F1; 20 max steps</span>
           <span>&#x1f3c6; 9 grading criteria</span>
           <span>&#x1f4a1; full_incident_runbook</span>
         </div>
@@ -607,6 +646,11 @@ LANDING_PAGE_HTML = """
         <span class="method get">GET</span>
         <span class="endpoint-path">/state</span>
         <span class="endpoint-desc">Current state</span>
+      </div>
+      <div class="endpoint-card">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/metrics</span>
+        <span class="endpoint-desc">Server stats</span>
       </div>
       <div class="endpoint-card">
         <span class="method get">GET</span>
@@ -707,30 +751,78 @@ LANDING_PAGE_HTML = """
 """
 
 
-@app.get("/", response_class=HTMLResponse, tags=["system"])
-def root():
-    """Landing page — environment overview."""
-    return LANDING_PAGE_HTML
+# ═══════════════════════════════════════════════════════════
+# System Endpoints
+# ═══════════════════════════════════════════════════════════
+
+
+@app.get("/", tags=["system"])
+def root(request: Request):
+    """Landing page — environment overview. Returns JSON for API clients, HTML for browsers."""
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept and "text/html" not in accept:
+        return {
+            "name": "sre-incident-response",
+            "version": "1.0.0",
+            "description": "OpenEnv SRE Incident Response environment",
+            "status": "ok",
+            "tasks": 3,
+            "docs": "/docs",
+            "health": "/health",
+        }
+    return HTMLResponse(LANDING_PAGE_HTML)
 
 
 @app.get("/health", tags=["system"])
-def health_check() -> Dict[str, str]:
+def health_check() -> Dict[str, Any]:
     """Health check endpoint. Always returns 200."""
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "environment": "sre-incident-response",
+        "version": "1.0.0",
+        "tasks_available": 3,
+        "active_sessions": len(sessions),
+    }
+
+
+@app.get("/metrics", response_model=MetricsModel, tags=["system"])
+def get_metrics() -> MetricsModel:
+    """Return server-level usage statistics."""
+    avg_reward = (
+        sum(_stats["rewards_history"]) / len(_stats["rewards_history"])
+        if _stats["rewards_history"]
+        else 0.0
+    )
+    return MetricsModel(
+        total_resets=_stats["total_resets"],
+        total_steps=_stats["total_steps"],
+        total_episodes_completed=_stats["total_episodes_completed"],
+        average_final_reward=round(avg_reward, 3),
+        active_sessions=len(sessions),
+    )
+
+
+# ═══════════════════════════════════════════════════════════
+# Environment Endpoints
+# ═══════════════════════════════════════════════════════════
 
 
 @app.post("/reset", response_model=ObservationModel, tags=["environment"])
 def reset_environment(
     task_id: Optional[str] = Query(None, description="Task ID as query param"),
     request: Optional[ResetRequest] = Body(None),
+    response: Response = None,
 ) -> ObservationModel:
     """
     Reset the environment for a new episode.
 
     Accepts task_id as a query parameter or in the request body.
     Returns the initial observation.
-    All previous state is cleared — no state leakage between episodes.
+    Creates a new session — no state leakage between episodes.
     """
+    # Create a fresh session
+    session_id, env = create_session()
+
     # Resolve task_id: query param > body field > default to first task
     resolved_task_id = task_id
     if resolved_task_id is None and request is not None and request.task_id is not None:
@@ -744,34 +836,70 @@ def reset_environment(
             raise HTTPException(status_code=400, detail="No tasks available")
     try:
         observation = env.reset(resolved_task_id)
+
+        # Embed session_id in observation
+        observation.session_id = session_id
+        if observation.hint is None:
+            observation.hint = f"Session {session_id[:8]} started."
+        else:
+            observation.hint = f"Session {session_id[:8]} started. {observation.hint}"
+
+        # Set response header
+        if response is not None:
+            response.headers["X-Session-ID"] = session_id
+
+        # Increment stats
+        _stats["total_resets"] += 1
+
         return observation
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/step", response_model=StepResultModel, tags=["environment"])
-def step_environment(action: ActionModel) -> StepResultModel:
+def step_environment(
+    action: ActionModel,
+    session_id: Optional[str] = Query(None, description="Session ID (optional, defaults to most recent)"),
+) -> StepResultModel:
     """
     Execute one step in the environment.
 
     Accepts an action and returns the step result with observation,
     reward, done flag, success flag, and detailed info.
+    Optionally pass session_id to target a specific session.
     """
     try:
+        sid, env = get_or_create_session(session_id)
         result = env.step(action)
+
+        # Increment stats
+        _stats["total_steps"] += 1
+
+        # Track completed episodes
+        if result.done:
+            _stats["total_episodes_completed"] += 1
+            _stats["rewards_history"].append(result.reward)
+            # Keep only last 100 rewards
+            if len(_stats["rewards_history"]) > 100:
+                _stats["rewards_history"] = _stats["rewards_history"][-100:]
+
         return result
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/state", response_model=StateModel, tags=["environment"])
-def get_state() -> StateModel:
+def get_state(
+    session_id: Optional[str] = Query(None, description="Session ID (optional, defaults to most recent)"),
+) -> StateModel:
     """
     Get the current environment state.
 
     Returns the current task, episode, step, reward, and grader scores.
+    Optionally pass session_id to target a specific session.
     """
     try:
+        sid, env = get_or_create_session(session_id)
         state = env.get_state()
         return state
     except RuntimeError as e:
@@ -785,4 +913,6 @@ def get_tasks() -> List[TaskInfo]:
 
     Returns task IDs, names, difficulties, max steps, and descriptions.
     """
-    return env.get_tasks()
+    # Use a temporary env instance just for listing tasks (stateless operation)
+    temp_env = SREEnvironment()
+    return temp_env.get_tasks()

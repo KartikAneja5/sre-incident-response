@@ -1,3 +1,4 @@
+# FIXED: [FIX 6] Added _initialized guard and better error recovery in step()
 """
 SRE Environment: manages episode lifecycle, state, and task dispatch.
 Thread-safe via episode_id tracking.
@@ -30,6 +31,9 @@ class SREEnvironment:
         self.episode_id: str = ""
         self.task_id: str = ""
         self.step_rewards: List[float] = []
+        self._initialized: bool = False
+        self._last_observation: Optional[ObservationModel] = None
+        self._total_reward: float = 0.0
 
     def reset(self, task_id: str) -> ObservationModel:
         """
@@ -56,9 +60,12 @@ class SREEnvironment:
         self.task_id = task_id
         self.episode_id = str(uuid.uuid4())
         self.step_rewards = []
+        self._total_reward = 0.0
+        self._initialized = True
 
         # Reset the task and get initial observation
         observation = self.current_task.reset()
+        self._last_observation = observation
         return observation
 
     def step(self, action: ActionModel) -> StepResultModel:
@@ -74,23 +81,44 @@ class SREEnvironment:
         Raises:
             RuntimeError: If no task is active (need to call /reset first).
         """
+        if not self._initialized:
+            raise RuntimeError(
+                "Environment not initialized. Call reset() first."
+            )
+
         if self.current_task is None:
             raise RuntimeError(
                 "No active episode. Call /reset with a task_id first."
+            )
+
+        # Guard: if episode already done, return final state without error
+        if self.current_task.done and self._last_observation is not None:
+            return StepResultModel(
+                observation=self._last_observation,
+                reward=self._total_reward,
+                done=True,
+                success=self._total_reward >= 0.5,
+                info={"error": "Episode already completed. Call /reset to start new episode."},
             )
 
         result = self.current_task.step(action)
 
         # Track per-step reward
         self.step_rewards.append(result["reward"])
+        self._total_reward = result["reward"]
 
-        return StepResultModel(
+        step_result = StepResultModel(
             observation=result["observation"],
             reward=result["reward"],
             done=result["done"],
             success=result["success"],
             info=result["info"],
         )
+
+        # Cache last observation for done-state guard
+        self._last_observation = step_result.observation
+
+        return step_result
 
     def get_state(self) -> StateModel:
         """

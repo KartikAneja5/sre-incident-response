@@ -269,7 +269,7 @@ def get_scenario_data(task_id: str) -> Dict[str, Any]:
             "alerts": FULL_RUNBOOK_ALERTS,
             "goal": FULL_RUNBOOK_GOAL,
             "hint": FULL_RUNBOOK_HINT,
-            "max_steps": 15,
+            "max_steps": 20,
             "name": "Full Incident Runbook — Redis OOM Cascade to Login Outage",
             "difficulty": "hard",
             "query_results": FULL_RUNBOOK_QUERY_RESULTS,
@@ -300,7 +300,7 @@ def get_all_task_info() -> List[Dict[str, str]]:
             "id": "full_incident_runbook",
             "name": "Full Incident Runbook",
             "difficulty": "hard",
-            "max_steps": 15,
+            "max_steps": 20,
             "description": "Handle a 3-service cascade failure from Redis OOM to mobile login outage",
         },
     ]

@@ -1,3 +1,4 @@
+# FIXED: [FIX 8] Added MetricsModel, added session_id to ObservationModel
 """
 Pydantic v2 models for the SRE Incident Response OpenEnv environment.
 All models are fully typed and use Pydantic BaseModel.
@@ -20,6 +21,7 @@ class ObservationModel(BaseModel):
     time_elapsed_seconds: float = Field(description="Simulated incident time")
     available_actions: List[str] = Field(description="List of valid action_type values")
     hint: Optional[str] = Field(default=None, description="Optional hint for debugging")
+    session_id: Optional[str] = Field(default=None, description="Session ID for this episode")
 
 
 class ActionModel(BaseModel):
@@ -77,3 +79,13 @@ class TaskInfo(BaseModel):
     difficulty: str
     max_steps: int
     description: str
+
+
+class MetricsModel(BaseModel):
+    """Response model for the /metrics endpoint."""
+
+    total_resets: int = Field(description="Total number of /reset calls since server start")
+    total_steps: int = Field(description="Total number of /step calls since server start")
+    total_episodes_completed: int = Field(description="Total episodes that reached done=True")
+    average_final_reward: float = Field(description="Average final reward across completed episodes")
+    active_sessions: int = Field(description="Number of currently tracked sessions")

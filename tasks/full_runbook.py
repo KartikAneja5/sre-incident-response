@@ -1,5 +1,5 @@
 """
-Task 3: Full Incident Runbook (Hard) — max_steps=15
+Task 3: Full Incident Runbook (Hard) — max_steps=20
 Three cascading failures: Redis OOM → auth cache storm → auth CPU spike →
 mobile API circuit breaker → company-wide login outage.
 Root cause: Redis maxmemory policy set to noeviction.
@@ -264,7 +264,7 @@ class FullIncidentRunbookTask(BaseTask):
 
     @property
     def max_steps(self) -> int:
-        return 15
+        return 20
 
     @property
     def scenario_name(self) -> str:
@@ -274,10 +274,15 @@ class FullIncidentRunbookTask(BaseTask):
         return FullRunbookGrader()
 
     def get_initial_observation(self) -> ObservationModel:
+        # Add a red herring alert to make the hard task genuinely harder.
+        # This alert is NOT part of any grader criteria and awards zero reward.
+        alerts_with_red_herring = list(FULL_RUNBOOK_ALERTS) + [
+            "WARNING: api-gateway connection pool at 75% — possibly related",
+        ]
         return ObservationModel(
             logs=FULL_RUNBOOK_LOGS,
             metrics=FULL_RUNBOOK_METRICS,
-            active_alerts=FULL_RUNBOOK_ALERTS,
+            active_alerts=alerts_with_red_herring,
             task_goal=FULL_RUNBOOK_GOAL,
             current_step=self.current_step,
             max_steps=self.max_steps,

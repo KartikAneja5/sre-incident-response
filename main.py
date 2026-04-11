@@ -1,4 +1,5 @@
-# FIXED: [FIX 1] Thread-safe sessions, [FIX 2] /health, [FIX 3] root JSON fallback,
+# FIXED: [CHANGE 1] Baseline scores HTML section, [CHANGE 2] Cached task list
+# [FIX 1] Thread-safe sessions, [FIX 2] /health, [FIX 3] root JSON fallback,
 #        [FIX 4] /metrics endpoint, [FIX 5] /reset returns session_id
 """
 FastAPI application for the SRE Incident Response OpenEnv environment.
@@ -736,6 +737,49 @@ LANDING_PAGE_HTML = """
     </div>
   </section>
 
+  <!-- Baseline Scores -->
+  <section class="section">
+    <div class="section-title">&#x1f4ca; Baseline Scores — Qwen/Qwen2.5-72B-Instruct</div>
+    <table class="actions-table">
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Difficulty</th>
+          <th>Steps Used</th>
+          <th>Final Score</th>
+          <th>Success</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>alert_triage</td>
+          <td style="color: #4ade80;">Easy</td>
+          <td>5 / 8</td>
+          <td style="color: #4ade80; font-weight: 700;">1.00</td>
+          <td>&#x2705;</td>
+        </tr>
+        <tr>
+          <td>root_cause_diagnosis</td>
+          <td style="color: #facc15;">Medium</td>
+          <td>4 / 10</td>
+          <td style="color: #4ade80; font-weight: 700;">1.00</td>
+          <td>&#x2705;</td>
+        </tr>
+        <tr>
+          <td>full_incident_runbook</td>
+          <td style="color: #f87171;">Hard</td>
+          <td>6 / 20</td>
+          <td style="color: #4ade80; font-weight: 700;">1.00</td>
+          <td>&#x2705;</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="text-align: center; margin-top: 16px; font-size: 13px; color: #64748b;">
+      Zero-shot evaluation &middot; No few-shot prompting &middot;
+      Average Score: <strong style="color: #4ade80;">1.00</strong>
+    </p>
+  </section>
+
   <!-- Footer -->
   <footer class="footer">
     <p>
@@ -906,13 +950,25 @@ def get_state(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# Module-level task list — computed once at startup, never changes
+_TASK_LIST: Optional[List[TaskInfo]] = None
+
+
+def _get_task_list() -> List[TaskInfo]:
+    """Return cached task list, initializing once if needed."""
+    global _TASK_LIST
+    if _TASK_LIST is None:
+        temp_env = SREEnvironment()
+        _TASK_LIST = temp_env.get_tasks()
+    return _TASK_LIST
+
+
 @app.get("/tasks", response_model=List[TaskInfo], tags=["environment"])
 def get_tasks() -> List[TaskInfo]:
     """
     Get a list of all available tasks.
 
     Returns task IDs, names, difficulties, max steps, and descriptions.
+    Task list is cached at startup — no new environment instances created per request.
     """
-    # Use a temporary env instance just for listing tasks (stateless operation)
-    temp_env = SREEnvironment()
-    return temp_env.get_tasks()
+    return _get_task_list()

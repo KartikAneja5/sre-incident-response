@@ -47,5 +47,5 @@ api.upload_folder(
     token=HF_TOKEN,
 )
 
-print(f"\n✅ Deployment complete!")
-print(f"🌐 Space URL: https://huggingface.co/spaces/{REPO_ID}")
+print(f"\n[SUCCESS] Deployment complete!")
+print(f"[URL] Space URL: https://huggingface.co/spaces/{REPO_ID}")

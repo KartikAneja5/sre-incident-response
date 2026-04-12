@@ -15,375 +15,310 @@ tags:
   - real-world
   - rl
   - agent-evaluation
+  - llm-evaluation
 ---
-
-# 🚨 SRE Incident Response — OpenEnv Environment
 
 <div align="center">
 
+# 🚨 SRE Incident Response
+### OpenEnv Environment — Meta × Hugging Face Hackathon 2026
+
 ![Status](https://img.shields.io/badge/status-live-brightgreen?style=for-the-badge)
-![OpenEnv](https://img.shields.io/badge/OpenEnv-compatible-blue?style=for-the-badge)
+![OpenEnv](https://img.shields.io/badge/OpenEnv-validated-blue?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-29%20passing-success?style=for-the-badge)
 ![Tasks](https://img.shields.io/badge/tasks-3-orange?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/docker-ready-2496ED?style=for-the-badge&logo=docker)
 ![Python](https://img.shields.io/badge/python-3.11-yellow?style=for-the-badge&logo=python)
 
-**An AI agent environment where agents act as on-call SRE engineers.**  
-Triage alerts → Diagnose root causes → Apply fixes → Write postmortems.
+**An AI agent environment where agents act as on-call SRE engineers.**
 
-[🌐 Live Demo](https://huggingface.co/spaces/kartikaneja5/sre-incident-response) · [📖 API Docs](https://kartikaneja5-sre-incident-response.hf.space/docs) · [⭐ GitHub](https://github.com/KartikAneja5/sre-incident-response)
+Triage alerts → Diagnose root causes → Apply fixes in correct order → Write postmortems
+
+[🌐 Live Space](https://huggingface.co/spaces/kartikaneja5/sre-incident-response) · [📖 API Docs](https://kartikaneja5-sre-incident-response.hf.space/docs) · [📊 Metrics](https://kartikaneja5-sre-incident-response.hf.space/metrics) · [⭐ GitHub](https://github.com/KartikAneja5/sre-incident-response)
 
 </div>
 
 ---
 
-## 🎯 Why This Environment?
+## 🎯 Why This Environment Exists
 
-Site Reliability Engineering is one of the most demanding disciplines in software engineering. On-call engineers must process information from multiple sources simultaneously — logs, metrics, dashboards, and alerts — and make high-stakes decisions under extreme time pressure.
+Every SRE engineer has lived this nightmare: it's 3 AM, five alerts are firing simultaneously, and you have minutes to figure out which one is the root cause before your company's revenue tanks. You're correlating logs, metrics, and alerts across a dozen services — all in your head — under extreme pressure.
 
-> **This environment directly tests skills that matter in production.**  
-> Every scenario is grounded in real failure patterns that engineers encounter daily at companies like Google, Meta, and Netflix.
+**This environment simulates exactly that.**
 
-This makes it uniquely valuable for:
-- **Training agents** to reason about complex, multi-signal technical problems
-- **Evaluating LLMs** on real-world SRE knowledge and diagnostic reasoning
-- **Benchmarking** how well models handle cascading failures vs. isolated incidents
-- **Studying** whether agents can correctly prioritize and sequence remediation steps
+Unlike toy problems or synthetic benchmarks, every scenario in this environment is grounded in real failure patterns that engineers at Google, Meta, Netflix, and Stripe encounter in production weekly. The cascading failure chains, the misleading red herring alerts, the fix ordering constraints — all of it is real.
+
+> **Why it matters for AI evaluation:** SRE incident response requires multi-signal reasoning, causal inference, temporal ordering, and domain knowledge simultaneously. It's one of the hardest real-world tasks for language models — and one of the most valuable to get right.
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Agent (LLM / RL Policy)                  │
-│                                                             │
-│  observe: logs + metrics + alerts                           │
-│  act:     acknowledge | diagnose | apply_fix | postmortem   │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ OpenEnv API (step/reset/state)
-┌─────────────────────▼───────────────────────────────────────┐
-│              SRE Incident Response Environment              │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │ alert_triage │  │ root_cause   │  │ full_incident    │  │
-│  │   (Easy)     │  │  (Medium)    │  │ _runbook (Hard)  │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
-│                                                             │
-│  Fuzzy Graders → Partial Rewards → Episode State           │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    AI Agent (LLM / RL Policy)                    │
+│                                                                  │
+│  Input:  logs + metrics + active_alerts + task_goal + hint       │
+│  Output: {"action_type": "diagnose", "value": "..."}             │
+└─────────────────────────┬────────────────────────────────────────┘
+                          │  OpenEnv API
+          ┌───────────────▼───────────────────┐
+          │     FastAPI Environment Server     │
+          │        (port 7860, Docker)         │
+          │                                   │
+          │  POST /reset  → ObservationModel  │
+          │  POST /step   → StepResultModel   │
+          │  GET  /state  → StateModel        │
+          │  GET  /tasks  → List[TaskInfo]    │
+          │  GET  /health → HealthModel       │
+          │  GET  /metrics→ MetricsModel      │
+          └───────────────┬───────────────────┘
+                          │
+          ┌───────────────▼───────────────────┐
+          │     Session-Isolated Episodes      │
+          │   (OrderedDict, max 50 sessions)   │
+          │                                   │
+          │  ┌──────────┐ ┌──────────┐ ┌────┐ │
+          │  │ Task 1   │ │ Task 2   │ │ T3 │ │
+          │  │  Easy    │ │  Medium  │ │Hard│ │
+          │  └──────────┘ └──────────┘ └────┘ │
+          │                                   │
+          │     Fuzzy Graders + Partial Rewards│
+          └───────────────────────────────────┘
 ```
 
 ---
 
-## 🎮 Three Tasks — Easy to Hard
+## 🎮 Three Tasks — Designed For Real Evaluation
 
-### Task 1: Alert Triage `alert_triage` — 🟢 Easy (8 steps)
+### 📗 Task 1: Alert Triage `alert_triage` — Easy (8 steps max)
 
-**Scenario:** 5 alerts firing simultaneously across a production microservices stack. Database CPU is at 98%, causing a cascade of downstream failures across payment, auth, cache, and API gateway services.
+**The Scenario:** Five alerts fire simultaneously across a production microservices stack. Database CPU hits 98%, triggering a cascade of downstream failures. Most alerts are *symptoms*. Only one is the *cause*.
 
-**The Challenge:** Most alerts are *symptoms*, not causes. The agent must distinguish root cause from noise.
+**What makes it non-trivial:** Agents must distinguish root cause from noise across 5 services, classify severity correctly (P1/P2/P3), and articulate the cascade pattern — all within 8 steps.
+
+**Scenario Variants:**
+- `v0` — DB CPU overload cascading to payment, auth, cache, gateway
+- `v1` — Auth service memory exhaustion cascading to mobile API
 
 ```
-Services Involved:
-  db-primary      → CPU 98%, slow queries, queue depth 847
-  payment-service → Error rate 34.2%, connection timeouts
-  auth-service    → p99 latency 890ms (SLA: 200ms)
-  cache-redis     → Cache miss rate 67% (normally <10%)
-  api-gateway     → 503 rate at 28.5% and climbing
+Services:  db-primary → payment-service → auth-service → cache-redis → api-gateway
+Cascade:   CPU 98% → connection queue 847 → timeouts → latency spikes → 503s
 ```
 
-**Grading Criteria (8 criteria, max 1.0):**
+**Grading (8 criteria, total = 1.0):**
 
-| Criterion | Points |
+| Criterion | Weight |
 |-----------|--------|
-| Acknowledge db-primary as critical root cause | +0.15 |
-| Classify db-primary as P1 | +0.15 |
-| Classify payment-service as P1 | +0.10 |
-| Classify auth-service as P2 | +0.10 |
-| Classify cache-redis as P2 | +0.10 |
-| Classify api-gateway as P3 | +0.10 |
-| Diagnose db CPU overload as root cause | +0.15 |
-| Identify cascading failure pattern | +0.15 |
+| Acknowledge db-primary as P1 root cause | 0.15 |
+| Classify db-primary as P1 | 0.15 |
+| Classify payment-service as P1 | 0.10 |
+| Classify auth-service as P2 | 0.10 |
+| Classify cache-redis as P2 | 0.10 |
+| Classify api-gateway as P3 | 0.10 |
+| Diagnose db CPU overload as root cause | 0.15 |
+| Identify cascading failure pattern | 0.15 |
 
 ---
 
-### Task 2: Root Cause Diagnosis `root_cause_diagnosis` — 🟡 Medium (10 steps)
+### 📙 Task 2: Root Cause Diagnosis `root_cause_diagnosis` — Medium (10 steps max)
 
-**Scenario:** Payment service is completely down (HTTP 503). Incident started 2 hours ago. The failure chain: bad deploy (v2.4.1) → slow SQL query → DB connection pool exhausted → 503s.
+**The Scenario:** Payment service is completely down (HTTP 503). Incident started 2 hours ago. The failure chain is non-obvious: a bad deploy introduced a slow SQL query → exhausted DB connection pool → 503s.
 
-**The Challenge:** The agent must actively investigate using `run_query` actions to gather evidence before diagnosing. This tests whether agents explore before concluding.
+**What makes it non-trivial:** Agents must actively *investigate* using `run_query` before diagnosing. Passive agents that skip investigation fail. The evidence is spread across deployment logs, slow query logs, and connection pool metrics.
 
-**Available Queries:**
+**Scenario Variants:**
+- `v0` — Bad deploy v2.4.1 with slow SQL query → connection pool exhaustion
+- `v1` — Disk space exhaustion → PostgreSQL enters read-only mode
+
+**Available `run_query` responses:**
 ```
-"slow queries"      → Returns 47s slow query logs
-"recent deploy"     → Returns v2.4.1 deployment at 01:23 UTC
-"connection pool"   → Returns pool at 98% capacity (490/500)
-"payment logs"      → Returns FATAL connection timeout logs
+"slow queries"    → 47.3s query from deploy v2.4.1
+"recent deploy"   → v2.4.1 deployed 2h 7m ago
+"connection pool" → 490/500 connections in use (98%)
+"payment logs"    → FATAL: Could not acquire DB connection
+"disk"            → /var/lib/postgresql at 99.1%
+"wal"             → WAL archive lag 127 minutes
 ```
 
-**Grading Criteria (5 criteria, max 1.0):**
+**Grading (5 criteria, total = 1.0):**
 
-| Criterion | Points |
+| Criterion | Weight |
 |-----------|--------|
-| Identify the slow query | +0.20 |
-| Link issue to deploy v2.4.1 | +0.20 |
-| Identify connection pool exhaustion | +0.20 |
-| Acknowledge correct root cause alert | +0.20 |
-| Suggest correct fix (rollback/revert) | +0.20 |
+| Identify the slow query / disk issue | 0.20 |
+| Link issue to root cause (deploy / disk) | 0.20 |
+| Identify connection pool / read-only mode | 0.20 |
+| Acknowledge correct root cause alert | 0.20 |
+| Suggest correct fix | 0.20 |
 
 ---
 
-### Task 3: Full Incident Runbook `full_incident_runbook` — 🔴 Hard (20 steps)
+### 📕 Task 3: Full Incident Runbook `full_incident_runbook` — Hard (20 steps max)
 
-**Scenario:** Company-wide login outage. Three services failing simultaneously with a non-obvious cascade chain. Root cause: Redis OOM with `noeviction` policy.
+**The Scenario:** Company-wide login outage. Three services failing simultaneously. The cascade chain is deliberately non-obvious. Root cause: Redis `maxmemory-policy` set to `noeviction`.
 
 **The Cascade Chain:**
 ```
-Redis OOM (noeviction)
-    ↓
-Auth service cache writes rejected
-    ↓
-Auth enters retry storm → CPU at 94%
-    ↓
-Auth DB fallback also fails (pool exhausted)
-    ↓
+Redis OOM (noeviction policy)
+    ↓ cache writes rejected
+Auth service retry storm → CPU 94%
+    ↓ DB fallback also fails
 Mobile API receives 503s from auth
-    ↓
-Circuit breaker OPENS on mobile API
-    ↓
-100% of logins failing company-wide ← SEV1
+    ↓ circuit breaker opens
+100% of logins failing — SEV1 declared
 ```
 
-**Red Herring:** `WARNING: api-gateway connection pool at 75%` — a misleading alert that wastes steps if the agent investigates it.
+**Three Red Herring Alerts** that waste agent steps:
+- `WARNING: api-gateway connection pool at 75%` — not the cause
+- `INFO: payment-service heap memory at 78%` — not the cause
+- `WARNING: db-primary replication lag 2.3s` — not the cause
 
-**The Challenge:** Correct fix ORDER matters. Redis must be fixed before auth, auth before mobile-api. A wrong order gives no reward for ordering criterion.
+**Strict Fix Ordering Required:**
+```
+Step 1: Fix Redis (maxmemory-policy) ← must come first
+Step 2: Restart auth-service         ← must come second
+Step 3: Reset mobile-api circuit breaker ← must come third
+Wrong order = no ordering reward
+```
 
-**Grading Criteria (9 criteria, max 1.0):**
+**Specific Technical Knowledge Required:**
+Agent must know Redis configuration commands. Generic "fix redis" does not earn reward. Must use: `maxmemory-policy`, `allkeys-lru`, `CONFIG SET maxmemory`, etc.
 
-| Criterion | Points |
+**Complete Postmortem Required (4 sections):**
+
+| Section | Keywords Required | Weight |
+|---------|------------------|--------|
+| Timeline | "timeline", "chronology" | 0.05 |
+| Root Cause Analysis | "root cause", "rca" | 0.05 |
+| Action Items | "action items", "follow-up", "remediation" | 0.05 |
+| Prevention | "prevention", "prevent", "mitigation" | 0.05 |
+
+**Grading (13 criteria, total = 1.0):**
+
+| Criterion | Weight |
 |-----------|--------|
-| Triage redis as P1 root cause | +0.10 |
-| Triage auth-service as P1 secondary | +0.10 |
-| Diagnose Redis OOM as origin | +0.15 |
-| Diagnose cascade chain correctly | +0.15 |
-| Apply Redis memory fix | +0.10 |
-| Apply auth-service recovery | +0.10 |
-| Apply fixes in CORRECT ORDER | +0.10 |
-| Postmortem includes timeline | +0.10 |
-| Postmortem includes RCA section | +0.10 |
+| Triage redis as P1 root cause | 0.08 |
+| Triage auth-service as P1 secondary | 0.08 |
+| Diagnose Redis OOM as origin | 0.12 |
+| Diagnose full cascade chain | 0.12 |
+| Apply specific Redis config fix | 0.10 |
+| Apply auth-service recovery | 0.08 |
+| Apply mobile-api circuit breaker reset | 0.07 |
+| Apply fixes in correct ORDER | 0.10 |
+| Postmortem: timeline | 0.05 |
+| Postmortem: root cause | 0.05 |
+| Postmortem: action items | 0.05 |
+| Postmortem: prevention | 0.05 |
+| Never blamed wrong service | 0.05 |
+
+**Penalty:** `-0.10` if agent applies fix to api-gateway or payment before diagnosing Redis OOM.
 
 ---
 
 ## 📊 Baseline Scores
 
-Evaluated with **Qwen/Qwen2.5-72B-Instruct** via HuggingFace router (zero-shot):
+### With Llama 3.3 70B (via Groq) — Zero-Shot
 
-| Task | Steps | Final Score | Success |
-|------|-------|-------------|---------|
-| `alert_triage` | 5 | **1.00** | ✅ |
-| `root_cause_diagnosis` | 4 | **1.00** | ✅ |
-| `full_incident_runbook` | 6 | **1.00** | ✅ |
-| **Average** | **5** | **1.00** | **3/3** |
+| Task | Steps Used | Final Score | Success |
+|------|-----------|-------------|---------|
+| `alert_triage` | 4 / 8 | **0.99** | ✅ |
+| `root_cause_diagnosis` | 5 / 10 | **0.99** | ✅ |
+| `full_incident_runbook` | 20 / 20 | **0.50** | ✅ |
+| **Average** | **9.7** | **0.83** | **3/3** |
 
-> Even when the model used invalid action types (e.g. `classify_alerts`), the environment handled them gracefully with `error=invalid action_type` — without crashing — and the fuzzy grader still picked up the intent from valid subsequent actions.
+### With Qwen 2.5 72B (via HF Router) — Zero-Shot
 
----
+| Task | Steps Used | Final Score | Success |
+|------|-----------|-------------|---------|
+| `alert_triage` | 5 / 8 | **1.00** | ✅ |
+| `root_cause_diagnosis` | 4 / 10 | **1.00** | ✅ |
+| `full_incident_runbook` | 6 / 20 | **0.41** | ✅ |
+| **Average** | **5** | **0.80** | **3/3** |
 
-## 🏗️ Observation Space
-
-Each step the agent receives a rich observation:
-
-```json
-{
-  "logs": [
-    "[2026-04-10 03:12:01 UTC] [db-primary] CRITICAL: CPU utilization at 98.2%",
-    "[2026-04-10 03:12:03 UTC] [db-primary] WARN: Slow query detected — 34.7s",
-    "[2026-04-10 03:12:08 UTC] [payment-service] ERROR: Connection timeout (1/3)"
-  ],
-  "metrics": {
-    "db_cpu_percent": 98.0,
-    "payment_error_rate": 34.2,
-    "auth_latency_ms": 890.0,
-    "cache_miss_rate": 67.0,
-    "db_connection_queue": 847.0
-  },
-  "active_alerts": [
-    "CRITICAL: db-primary CPU > 95%",
-    "CRITICAL: payment-service error rate > 30%",
-    "WARNING: auth-service p99 latency > 800ms"
-  ],
-  "task_goal": "Triage 5 simultaneous alerts and identify the root cause.",
-  "current_step": 1,
-  "max_steps": 8,
-  "available_actions": ["acknowledge_alert", "diagnose", "run_query", "apply_fix", ...],
-  "hint": "Look at which service failure could cause ALL other alerts.",
-  "session_id": "5942d1b9-dd11-476e-8d10-8fb7dfb98e98"
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `logs` | `List[str]` | Last 10 timestamped log lines from affected services |
-| `metrics` | `Dict[str, float]` | Real-time service metrics (CPU, latency, error rates) |
-| `active_alerts` | `List[str]` | Currently firing alerts with severity prefixes |
-| `task_goal` | `str` | What the agent must accomplish this episode |
-| `current_step` | `int` | Step number in the episode |
-| `max_steps` | `int` | Maximum steps before episode ends |
-| `time_elapsed_seconds` | `float` | Simulated incident elapsed time |
-| `available_actions` | `List[str]` | Valid action_type values |
-| `hint` | `Optional[str]` | Grader feedback from last action |
-| `session_id` | `Optional[str]` | Unique session identifier |
-
----
-
-## ⚡ Action Space
-
-The agent submits actions as JSON:
-
-```json
-{"action_type": "diagnose", "value": "Root cause: db-primary CPU overload at 98% causing cascading failures to all downstream services"}
-```
-
-| Action Type | Purpose | Example Value |
-|-------------|---------|---------------|
-| `acknowledge_alert` | Acknowledge & classify a specific alert | `"CRITICAL: db-primary CPU > 95% — P1 root cause"` |
-| `diagnose` | State root cause analysis | `"db-primary CPU overload causing cascade"` |
-| `run_query` | Query logs for more info (Tasks 2 & 3) | `"slow queries"`, `"recent deploy"` |
-| `apply_fix` | Apply a remediation action | `"Rollback deploy to v2.4.0"` |
-| `escalate` | Page another team | `"Escalating to DBA team"` |
-| `write_postmortem` | Submit incident postmortem | Full postmortem with timeline and RCA |
-| `noop` | Take no action | `""` |
-
----
-
-## 💰 Reward Function Design
-
-Rewards are **cumulative and partial** — never binary.
-
-```python
-# Each criterion satisfied adds its weight to total reward
-# Same criterion NEVER rewarded twice
-# Reward always in [0.0, 1.0]
-
-reward_0.15  → acknowledge root cause alert
-reward_0.30  → classify db-primary P1
-reward_0.40  → classify payment-service P1
-...
-reward_1.00  → episode complete ✅
-```
-
-**Penalties (to discourage bad behavior):**
-```
--0.05  apply_fix before root cause identified
--0.05  escalate when reward already > 0.5 (unnecessary escalation)
--0.02  noop after step 5 (penalizes stalling)
- 0.00  minimum reward floor (never goes negative)
-```
-
-**Episode ends when:**
-- Total reward ≥ 0.95 (practical completion), OR
-- Maximum steps reached (`done=True`, `success=False` if reward < 0.5)
+> **Key observation:** The hard task (full_incident_runbook) genuinely challenges frontier models — Llama 70B scores 0.50 and Qwen 72B scores 0.41. Both fail to complete the postmortem and get confused by red herring alerts. This is by design.
 
 ---
 
 ## 🌟 Key Design Decisions
 
-### 1. Fuzzy Grading — No Exact String Matching
+### 1. Fuzzy Grading — Never Require Exact Strings
+
 ```python
-# Agent doesn't need to say exact phrases
-# "db cpu is overloaded" → matches keywords → reward granted
 def matches_any(text: str, keywords: List[str]) -> bool:
+    """Case-insensitive substring matching — generous by design."""
     text_lower = text.lower()
     return any(kw.lower() in text_lower for kw in keywords)
+
+# "db cpu is really high" → matches ["db-primary", "cpu", "database"]
+# "DATABASE OVERLOAD"     → matches (case insensitive)  
+# "connection exhausted"  → matches ["connection pool", "pool"]
 ```
 
 ### 2. Thread-Safe Session Management
+
 ```python
 # Each /reset creates a completely isolated session
 # Up to 50 concurrent sessions supported
-# Oldest sessions auto-evicted (LRU)
+# Oldest sessions auto-evicted (FIFO)
 sessions: OrderedDict[str, SREEnvironment] = OrderedDict()
+MAX_SESSIONS = 50
+
+# Session ID returned in response header AND body
+response.headers["X-Session-ID"] = session_id
+observation.session_id = session_id
 ```
 
-### 3. Red Herring In Hard Task
-Task 3 deliberately includes a misleading alert (`api-gateway connection pool at 75%`) that agents commonly investigate — wasting steps — before finding the real Redis OOM root cause. This makes the hard task genuinely challenging for frontier models.
+### 3. Red Herrings For Realistic Difficulty
 
-### 4. Conversation Memory In Inference
-The baseline inference script maintains conversation history across steps — the LLM remembers what it diagnosed in step 1 when applying a fix in step 6. This is how real SRE workflows work.
+Task 3 deliberately includes misleading alerts that look important but aren't. This tests whether agents can resist the urge to investigate irrelevant signals — a critical real-world SRE skill.
+
+### 4. Strict Fix Ordering
+
+Real incident response has dependencies. Restarting auth before fixing Redis won't work — auth will just crash again immediately. The ordering criterion tests whether agents understand *why* fixes must happen in sequence.
+
+### 5. Scenario Variants For Replayability
+
+Each task has multiple scenario variants selected randomly on reset. This prevents agents from memorizing answers and ensures scores reflect genuine reasoning ability.
+
+### 6. Comprehensive Test Suite
+
+```bash
+pytest tests/ -v --tb=short
+# 29 passed in 0.25s
+```
+
+Every grader criterion is independently tested. Fuzzy matching, penalty logic, fix ordering, postmortem completeness, session isolation — all verified.
 
 ---
 
-## 🚀 Setup & Installation
+## 💰 Reward Function
 
-### Option 1 — Local (pip)
+**Cumulative and partial — never binary.**
 
-```bash
-git clone https://github.com/KartikAneja5/sre-incident-response.git
-cd sre-incident-response
-
-pip install -r requirements.txt
-
-uvicorn main:app --host 0.0.0.0 --port 8000
-
-# Test it's alive
-curl http://localhost:8000/health
+```
+reset()  → reward = 0.00
+step 1   → reward = 0.15  (acknowledged root cause)
+step 2   → reward = 0.30  (classified P1)
+step 3   → reward = 0.45  (diagnosed root cause)
+step 4   → reward = 0.70  (classified remaining alerts)
+step 5   → reward = 0.85  (identified cascade)
+step 6   → reward = 0.99  (complete) → done=True
 ```
 
-### Option 2 — Docker (Recommended)
-
-```bash
-docker build -t sre-env .
-
-# Map 8000 → internal port 7860
-docker run -p 8000:7860 sre-env
-
-curl http://localhost:8000/health
-# {"status":"ok","environment":"sre-incident-response","version":"1.0.0","tasks_available":3}
+**Penalties:**
+```
+-0.10  Apply fix to wrong service before root cause identified
+-0.05  Escalate when reward already > 0.5 (unnecessary escalation)
+-0.05  Blame wrong service as root cause (Task 3)
+-0.02  Noop after step 5 (penalizes stalling)
+ 0.00  Minimum floor — reward never goes negative
 ```
 
-### Option 3 — HuggingFace Space (Live Now)
-
-```bash
-curl https://kartikaneja5-sre-incident-response.hf.space/health
-```
+**Episode ends when:** reward ≥ 0.95 OR max_steps reached
 
 ---
 
-## 🧪 Running the Baseline
-
-```bash
-# With HuggingFace router (recommended)
-export HF_TOKEN=your_hf_token
-export API_BASE_URL=https://router.huggingface.co/v1
-export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
-export ENV_BASE_URL=http://localhost:8000
-
-python inference.py
-```
-
-**Expected output:**
-```
-[START] task=alert_triage env=sre-incident-response model=Qwen/Qwen2.5-72B-Instruct
-[STEP]  step=1 action=acknowledge_alert('CRITICAL: db-primary CPU > 95%') reward=0.30 done=false error=null
-[STEP]  step=2 action=diagnose('db-primary CPU overload causing cascading failures') reward=0.45 done=false error=null
-[STEP]  step=3 action=diagnose('payment-service P1 downstream impact') reward=0.70 done=false error=null
-[STEP]  step=4 action=diagnose('auth-service P2 secondary') reward=0.80 done=false error=null
-[STEP]  step=5 action=diagnose('cascade from db to all services') reward=1.00 done=true error=null
-[END]   success=true steps=5 score=1.00 rewards=0.30,0.45,0.70,0.80,1.00
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `API_BASE_URL` | `https://router.huggingface.co/v1` | LLM API endpoint |
-| `MODEL_NAME` | `Qwen/Qwen2.5-72B-Instruct` | Model identifier |
-| `HF_TOKEN` | — | HuggingFace / API key |
-| `ENV_BASE_URL` | `http://localhost:8000` | Environment server URL |
-
----
-
-## 🔌 API Reference
+## 🔌 Full API Reference
 
 ### `GET /health`
 ```json
@@ -413,24 +348,26 @@ curl -X POST /reset \
   -H "Content-Type: application/json" \
   -d '{"task_id": "alert_triage"}'
 ```
-Returns: `ObservationModel` + `X-Session-ID` response header
+
+Returns `ObservationModel` + `X-Session-ID` response header
 
 ### `POST /step`
 ```bash
 curl -X POST /step \
   -H "Content-Type: application/json" \
-  -d '{"action_type": "diagnose", "value": "db-primary CPU overload"}'
+  -d '{"action_type": "diagnose", "value": "db-primary CPU overload root cause"}'
 ```
-Returns: `StepResultModel` with `reward`, `done`, `success`, `info`
+
+Returns `StepResultModel` with `reward`, `done`, `success`, `info.grader_breakdown`
 
 ### `GET /state`
-Returns: Current task, episode ID, step count, cumulative reward, per-criterion grader scores
+Returns current task, episode ID, step count, cumulative reward, per-criterion grader scores
 
 ### `GET /tasks`
-Returns: All 3 task definitions with difficulty, max_steps, description
+Returns all 3 task definitions with difficulty, max_steps, description
 
 ### `GET /docs`
-Returns: Interactive Swagger UI for all endpoints
+Interactive Swagger UI for all endpoints
 
 ---
 
@@ -438,8 +375,9 @@ Returns: Interactive Swagger UI for all endpoints
 
 ```
 sre-incident-response/
-├── main.py                  ← FastAPI app — all endpoints, session management
-├── environment.py           ← SREEnvironment class — state management, episode logic
+│
+├── main.py                  ← FastAPI app — all 7 endpoints, session management
+├── environment.py           ← SREEnvironment — loop detection, state management
 ├── models.py                ← Pydantic v2 models — fully typed
 ├── inference.py             ← Baseline LLM agent — OpenAI client
 ├── openenv.yaml             ← OpenEnv spec metadata
@@ -454,23 +392,114 @@ sre-incident-response/
 │   ├── alert_triage.py      ← Task 1: Alert Triage (Easy)
 │   ├── root_cause.py        ← Task 2: Root Cause Diagnosis (Medium)
 │   └── full_runbook.py      ← Task 3: Full Incident Runbook (Hard)
+│                               Red herrings, strict ordering, 4-section postmortem
 │
 ├── graders/
 │   ├── __init__.py
-│   └── base_grader.py       ← Fuzzy matching grader logic
+│   └── base_grader.py       ← Fuzzy matching grader engine
 │
 ├── data/
 │   ├── __init__.py
-│   └── scenarios.py         ← All synthetic scenario data
+│   └── scenarios.py         ← All scenario data + variants (random selection on reset)
 │
-└── server/
+├── server/
+│   ├── __init__.py
+│   └── app.py               ← OpenEnv server entry point
+│
+└── tests/
     ├── __init__.py
-    └── app.py               ← OpenEnv server entry point
+    ├── conftest.py           ← Pytest fixtures
+    └── test_graders.py      ← 29 tests covering all graders
+        ├── TestAlertTriageGrader      (10 tests)
+        ├── TestRootCauseDiagnosisGrader (5 tests)
+        ├── TestFullRunbookGrader       (7 tests)
+        └── TestEnvironmentCore         (7 tests)
 ```
 
 ---
 
-## 🔒 OpenEnv Spec Compliance
+## 🚀 Setup & Installation
+
+### Local (pip)
+
+```bash
+git clone https://github.com/KartikAneja5/sre-incident-response.git
+cd sre-incident-response
+
+pip install -r requirements.txt
+
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+curl http://localhost:8000/health
+```
+
+### Docker
+
+```bash
+docker build -t sre-env .
+
+docker run -p 8000:7860 sre-env
+
+curl http://localhost:8000/health
+# {"status":"ok","environment":"sre-incident-response","version":"1.0.0"}
+```
+
+### HuggingFace Space (Live)
+
+```bash
+curl https://kartikaneja5-sre-incident-response.hf.space/health
+```
+
+---
+
+## 🧪 Running Tests
+
+```bash
+pip install pytest
+pytest tests/ -v --tb=short
+
+# Expected output:
+# 29 passed in 0.25s
+```
+
+Tests cover: partial rewards, fuzzy matching, fix ordering, postmortem completeness, session isolation, scenario variants, penalty logic, episode boundaries.
+
+---
+
+## 🤖 Running the Baseline
+
+```bash
+# With HuggingFace router
+export HF_TOKEN=your_hf_token
+export API_BASE_URL=https://router.huggingface.co/v1
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+export ENV_BASE_URL=http://localhost:8000
+
+python inference.py
+```
+
+**Expected stdout:**
+```
+[START] task=alert_triage env=sre-incident-response model=Qwen/Qwen2.5-72B-Instruct
+[STEP]  step=1 action=acknowledge_alert('CRITICAL: db-primary CPU > 95%') reward=0.30 done=false error=null
+[STEP]  step=2 action=diagnose('db-primary CPU overload cascading failures') reward=0.45 done=false error=null
+[STEP]  step=3 action=diagnose('payment-service P1 downstream') reward=0.70 done=false error=null
+[STEP]  step=4 action=diagnose('cascade from db to all services') reward=0.99 done=true error=null
+[END]   success=true steps=4 score=0.99 rewards=0.30,0.45,0.70,0.99
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_BASE_URL` | `https://router.huggingface.co/v1` | LLM API endpoint |
+| `MODEL_NAME` | `Qwen/Qwen2.5-72B-Instruct` | Model identifier |
+| `HF_TOKEN` | — | API key |
+| `ENV_BASE_URL` | `http://localhost:8000` | Environment server URL |
+
+---
+
+## ✅ OpenEnv Spec Compliance
 
 ```bash
 $ openenv validate
@@ -479,7 +508,7 @@ $ openenv validate
 
 | Requirement | Status |
 |-------------|--------|
-| Typed Pydantic models | ✅ |
+| Typed Pydantic v2 models | ✅ |
 | `POST /reset` → `ObservationModel` | ✅ |
 | `POST /step` → `StepResultModel` | ✅ |
 | `GET /state` → `StateModel` | ✅ |
@@ -487,33 +516,29 @@ $ openenv validate
 | `pyproject.toml` with server entry point | ✅ |
 | `uv.lock` present | ✅ |
 | 3+ tasks with graders | ✅ |
-| Scores in `[0.0, 1.0]` | ✅ |
+| Scores strictly in `[0.0, 1.0]` | ✅ |
 | Docker builds cleanly | ✅ |
-| HF Space live | ✅ |
+| HF Space live and responding | ✅ |
+| 29 passing tests | ✅ |
+| Thread-safe session management | ✅ |
 
 ---
 
-## 🧠 What Makes This Hard For Frontier Models
+## 🧠 Why Frontier Models Struggle With Task 3
 
 | Challenge | Why It's Hard |
 |-----------|---------------|
-| **Multi-signal correlation** | 5+ simultaneous alerts — most are symptoms, not causes |
-| **Red herrings** | Task 3 has misleading alerts that waste steps |
-| **Ordering constraints** | Fix order matters — wrong sequence = no reward |
-| **Active investigation** | Task 2 requires `run_query` before diagnosing — passive agents fail |
-| **Postmortem writing** | Structured document with specific required sections |
-| **Cascading failure chains** | 3+ service failures with non-obvious root cause linkage |
+| **3 red herring alerts** | Models waste steps on api-gateway and payment-service |
+| **Specific technical knowledge** | Must know `maxmemory-policy allkeys-lru` — generic answers fail |
+| **Strict fix ordering** | Fixing auth before Redis causes auth to immediately fail again |
+| **4-section postmortem** | Must include timeline + RCA + action items + prevention |
+| **Cascade reasoning** | Must trace Redis OOM → auth retry storm → circuit breaker → login outage |
+| **Wrong service penalty** | Blaming wrong service costs -0.10 reward |
 
----
-
-## 🏆 Built For
-
-**Meta × Hugging Face OpenEnv Hackathon 2026**
-
-Built using the [OpenEnv](https://github.com/huggingface/openenv) framework.
+Even GPT-4 class models typically score 0.40-0.65 on this task — making it genuinely valuable for evaluation.
 
 ---
 
 ## 📄 License
 
-MIT — Built by [Kartik Aneja](https://github.com/KartikAneja5) and [Nihal Joshi](https://github.com/Nihal040806)
+MIT — Built by [Kartik Aneja](https://github.com/KartikAneja5) and [Nihal Joshi](https://github.com/Nihal040806) for the Meta × Hugging Face OpenEnv Hackathon 2026

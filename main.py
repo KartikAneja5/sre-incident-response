@@ -559,11 +559,11 @@ LANDING_PAGE_HTML = """
     </div>
     <div class="status-item">
       <span class="status-dot purple"></span>
-      3 Tasks Available
+      3 Tasks · 5 Scenarios
     </div>
     <div class="status-item">
       <span class="status-dot blue"></span>
-      OpenEnv Compatible
+      29 Tests Passing
     </div>
   </div>
 
@@ -607,12 +607,13 @@ LANDING_PAGE_HTML = """
           <span class="difficulty-badge hard">Hard</span>
         </div>
         <p class="task-desc">
-          Redis OOM &rarr; auth cache miss storm &rarr; mobile API circuit breaker &rarr;
-          company-wide login outage. Fix the cascade and write the postmortem.
-        </p>
+  Redis OOM &rarr; auth cache miss storm &rarr; mobile API circuit breaker &rarr;
+  company-wide login outage. Fix the cascade in correct order and write a
+  complete postmortem. Includes 3 red herring alerts to challenge frontier models.
+</p>
         <div class="task-meta">
           <span>&#x23F1; 20 max steps</span>
-          <span>&#x1f3c6; 9 grading criteria</span>
+          <span>&#x1f3c6; 13 grading criteria</span>
           <span>&#x1f4a1; full_incident_runbook</span>
         </div>
       </div>
@@ -755,28 +756,30 @@ LANDING_PAGE_HTML = """
           <td>alert_triage</td>
           <td style="color: #4ade80;">Easy</td>
           <td>5 / 8</td>
-          <td style="color: #4ade80; font-weight: 700;">1.00</td>
+          <td style="color: #4ade80; font-weight: 700;">0.99</td>
           <td>&#x2705;</td>
         </tr>
         <tr>
           <td>root_cause_diagnosis</td>
           <td style="color: #facc15;">Medium</td>
           <td>4 / 10</td>
-          <td style="color: #4ade80; font-weight: 700;">1.00</td>
+          <td style="color: #4ade80; font-weight: 700;">0.99</td>
           <td>&#x2705;</td>
         </tr>
         <tr>
           <td>full_incident_runbook</td>
           <td style="color: #f87171;">Hard</td>
           <td>6 / 20</td>
-          <td style="color: #4ade80; font-weight: 700;">1.00</td>
+          <td style="color: #4ade80; font-weight: 700;">0.51</td>
           <td>&#x2705;</td>
         </tr>
       </tbody>
     </table>
     <p style="text-align: center; margin-top: 16px; font-size: 13px; color: #64748b;">
       Zero-shot evaluation &middot; No few-shot prompting &middot;
-      Average Score: <strong style="color: #4ade80;">1.00</strong>
+      Llama 3.3 70B: avg <strong style="color: #4ade80;">0.83</strong>
+&nbsp;&middot;&nbsp;
+Qwen 2.5 72B: avg <strong style="color: #4ade80;">0.80</strong>
     </p>
   </section>
 

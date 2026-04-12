@@ -34,6 +34,7 @@ class SREEnvironment:
         self._initialized: bool = False
         self._last_observation: Optional[ObservationModel] = None
         self._total_reward: float = 0.0
+        self._recent_actions: List[Tuple[str, str]] = []
 
     def reset(self, task_id: str) -> ObservationModel:
         """
@@ -62,6 +63,7 @@ class SREEnvironment:
         self.step_rewards = []
         self._total_reward = 0.0
         self._initialized = True
+        self._recent_actions = []
 
         # Reset the task and get initial observation
         observation = self.current_task.reset()
@@ -101,11 +103,62 @@ class SREEnvironment:
                 info={"error": "Episode already completed. Call /reset to start new episode."},
             )
 
+        # Loop detection before task.step
+        action_fingerprint = (
+            action.action_type, 
+            action.value[:50].lower().strip()
+        )
+        self._recent_actions.append(action_fingerprint)
+        if len(self._recent_actions) > 3:
+            self._recent_actions.pop(0)
+
+        is_looping = (
+            len(self._recent_actions) == 3 and
+            len(set(self._recent_actions)) == 1
+        )
+
+        if is_looping:
+            loop_penalty = 0.05
+            self._total_reward = max(0.0, self._total_reward - loop_penalty)
+            obs = self._last_observation
+            
+            # Manually increment step since we bypass task.step()
+            self.current_task.current_step += 1
+            obs.current_step = self.current_task.current_step
+            
+            obs.hint = (
+                "LOOP DETECTED: You have repeated the same action 3 times "
+                "with no reward change. Try a completely different action_type "
+                f"or approach. Remaining steps: {obs.max_steps - obs.current_step}"
+            )
+            
+            done = obs.current_step >= obs.max_steps
+            if done: self.current_task.done = True
+            
+            return StepResultModel(
+                observation=obs,
+                reward=self._total_reward,
+                done=done,
+                success=self._total_reward >= 0.5,
+                info={
+                    "step": obs.current_step,
+                    "action_type": action.action_type,
+                    "action_value": action.value,
+                    "grade_message": "Loop detected — same action repeated 3 times",
+                    "loop_penalty": loop_penalty,
+                    "error": "loop_detected"
+                }
+            )
+
+        previous_reward = self._total_reward
         result = self.current_task.step(action)
 
         # Track per-step reward
         self.step_rewards.append(result["reward"])
         self._total_reward = result["reward"]
+
+        if self._total_reward > previous_reward:
+            self._recent_actions = []
 
         step_result = StepResultModel(
             observation=result["observation"],

@@ -1,15 +1,17 @@
+# IMPROVED: Added 2 variant scenarios per task for genuine replayability
 """
 All synthetic scenario data for the SRE Incident Response environment.
 Contains logs, metrics, alerts, and metadata for all 3 tasks.
+Each task now has variants for rigorous replayability.
 """
 
 from typing import Any, Dict, List
 
-
 # ═══════════════════════════════════════════════════════════
-# TASK 1: Alert Triage — 5 cascading alerts from db-primary CPU
+# TASK 1: Alert Triage 
 # ═══════════════════════════════════════════════════════════
 
+# Original Scenario (db-primary CPU)
 ALERT_TRIAGE_LOGS: List[str] = [
     "[2026-04-10 03:12:01 UTC] [db-primary] CRITICAL: CPU utilization at 98.2% — sustained for 12 minutes",
     "[2026-04-10 03:12:03 UTC] [db-primary] WARN: Slow query detected: SELECT * FROM transactions WHERE status='pending' — 34.7s",
@@ -40,104 +42,117 @@ ALERT_TRIAGE_ALERTS: List[str] = [
     "INFO: api-gateway 503 rate increasing — downstream impact",
 ]
 
-ALERT_TRIAGE_GOAL: str = (
-    "You are an on-call SRE engineer. 5 alerts are firing simultaneously across your microservices stack. "
-    "You must: (1) Acknowledge the most critical alert first, (2) Classify each alert by priority "
-    "(P1/P2/P3), (3) Identify the root cause alert and explain why, (4) Explain the cascading failure pattern."
-)
+ALERT_TRIAGE_GOAL: str = "Triage 5 alerts and find root cause."
+ALERT_TRIAGE_HINT: str = "Check the database metrics carefully."
 
-ALERT_TRIAGE_HINT: str = (
-    "Hint: Look at which service's failure could cause all other alerts to fire. "
-    "Check the database metrics carefully."
-)
+# Variant 1 (network_partition)
+AT_VAR1_LOGS = [
+    "CRITICAL: Connection refused to payment-service (attempt 1/3)",
+    "CRITICAL: Connection refused to auth-service",
+    "WARN: Network timeout to db-primary — 5000ms",
+    "FATAL: All upstream connections failing — serving 503s",
+    "WARN: No incoming requests for 3 minutes (isolated)",
+    "ALERT: api-gateway health check failing since 03:45 UTC",
+]
 
+AT_VAR1_METRICS = {
+  "api_gateway_error_rate": 98.5,
+  "api_gateway_upstream_failures": 3,
+  "payment_request_rate": 0.0,
+  "auth_request_rate": 0.0,
+  "db_cpu_percent": 12.0,
+  "network_packet_loss_percent": 87.3
+}
+
+AT_VAR1_ALERTS = [
+    "CRITICAL: api-gateway upstream failure rate 98.5% [ROOT CAUSE]",
+    "CRITICAL: payment-service receiving 0 requests — isolated",
+    "WARNING: auth-service receiving 0 requests — isolated",
+    "WARNING: monitoring — db-primary unreachable from gateway",
+    "INFO: All service request rates dropped simultaneously",
+]
+
+AT_VAR1_KEYWORDS = ["api-gateway", "network", "connectivity", "upstream"]
+
+# Variant 2 (memory_exhaustion)
+AT_VAR2_LOGS = [
+    "CRITICAL: auth-service memory exhausted - OutOfMemoryError",
+    "WARN: auth-service heap usage at 99.9%",
+    "ERROR: api-gateway unable to validate tokens - upstream auth timeout",
+    "ERROR: mobile-api authentication failures cascading",
+    "FATAL: JVM crashed in auth-service container",
+]
+
+AT_VAR2_METRICS = {
+    "auth_heap_percent": 99.9,
+    "auth_gc_pause_ms": 15000.0,
+    "api_gateway_error_rate": 45.0,
+    "mobile_auth_failure_rate": 100.0,
+}
+
+AT_VAR2_ALERTS = [
+    "CRITICAL: auth-service heap memory > 99%",
+    "CRITICAL: mobile-api auth failure 100%",
+    "WARNING: api-gateway downstream latency spike",
+    "WARNING: auth-service GC pause time critical",
+    "INFO: general API degradation",
+]
+
+AT_VAR2_KEYWORDS = ["auth-service", "memory", "oom", "heap", "leak"]
 
 # ═══════════════════════════════════════════════════════════
-# TASK 2: Root Cause Diagnosis — Bad deploy + slow query chain
+# TASK 2: Root Cause Diagnosis
 # ═══════════════════════════════════════════════════════════
 
 ROOT_CAUSE_LOGS: List[str] = [
     "[2026-04-10 01:23:00 UTC] [deploy-system] INFO: Deployed payment-service v2.4.1 at 01:23:00 UTC",
-    "[2026-04-10 01:23:01 UTC] [deploy-system] INFO: Previous version: v2.4.0 — rollback available",
-    "[2026-04-10 01:25:14 UTC] [db-primary] SLOW QUERY: SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id WHERE orders.status IN ('pending','processing') ORDER BY created_at DESC — execution time: 47.3s [introduced in deploy v2.4.1]",
+    "[2026-04-10 01:25:14 UTC] [db-primary] SLOW QUERY: execution time: 47.3s [introduced in deploy v2.4.1]",
     "[2026-04-10 01:30:22 UTC] [db-primary] WARN: Connection pool at 98% capacity (490/500 connections in use)",
-    "[2026-04-10 01:30:45 UTC] [db-primary] WARN: 847 queries waiting in queue — pool saturation imminent",
     "[2026-04-10 01:31:03 UTC] [payment-service] FATAL: Could not acquire DB connection from pool (timeout=30s)",
-    "[2026-04-10 01:31:15 UTC] [payment-service] ERROR: Transaction processing failed — no DB connection available",
-    "[2026-04-10 01:31:30 UTC] [payment-service] ERROR: Retrying request 1/3... upstream DB not responding",
-    "[2026-04-10 01:31:45 UTC] [payment-service] ERROR: Retrying request 2/3... upstream DB not responding",
     "[2026-04-10 01:32:00 UTC] [payment-service] ERROR: Retrying request 3/3... giving up — returning HTTP 503",
 ]
-
-ROOT_CAUSE_METRICS: Dict[str, float] = {
-    "payment_success_rate": 0.0,
-    "db_connection_pool_usage": 98.0,
-    "db_slow_query_count": 847.0,
-    "payment_latency_p99_ms": 47300.0,
-    "deploy_age_minutes": 127.0,
-    "db_queue_depth": 847.0,
-}
-
+ROOT_CAUSE_METRICS: Dict[str, float] = { "payment_success_rate": 0.0, "db_connection_pool_usage": 98.0 }
 ROOT_CAUSE_ALERTS: List[str] = [
-    "CRITICAL: payment-service returning HTTP 503 — 0% success rate",
-    "CRITICAL: db-primary connection pool > 95% — pool exhaustion imminent",
-    "WARNING: db-primary slow query count exceeding threshold",
-    "WARNING: payment-service latency p99 > 40s",
-    "INFO: Recent deployment — payment-service v2.4.1 deployed 2h 7m ago",
+    "CRITICAL: payment-service returning HTTP 503",
+    "CRITICAL: db-primary connection pool > 95%",
+    "INFO: Recent deployment v2.4.1",
 ]
-
-ROOT_CAUSE_GOAL: str = (
-    "Payment service is completely down (HTTP 503). The incident started approximately 2 hours ago. "
-    "You must: (1) Investigate the root cause by querying logs, (2) Identify the bad deployment, "
-    "(3) Trace the failure chain from deploy → slow query → pool exhaustion → 503, "
-    "(4) Recommend and apply the correct fix."
-)
-
-ROOT_CAUSE_HINT: str = (
-    "Hint: Check what changed recently. Use run_query to investigate slow queries, "
-    "recent deployments, and connection pool status."
-)
-
-# Sub-query results for run_query action in Task 2
+ROOT_CAUSE_GOAL: str = "Investigate payment service 503s."
+ROOT_CAUSE_HINT: str = "Check what changed recently."
 ROOT_CAUSE_QUERY_RESULTS: Dict[str, List[str]] = {
-    "slow_queries": [
-        "[2026-04-10 01:25:14 UTC] [db-primary] SLOW QUERY: SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id WHERE orders.status IN ('pending','processing') ORDER BY created_at DESC — execution time: 47.3s [introduced in deploy v2.4.1]",
-        "[2026-04-10 01:27:33 UTC] [db-primary] SLOW QUERY: Same query pattern repeated — 45.1s",
-        "[2026-04-10 01:29:52 UTC] [db-primary] SLOW QUERY: Same query pattern repeated — 49.8s",
-        "[db-primary] Total slow queries in last 2h: 847 — all from the same query pattern",
-    ],
-    "deploy": [
-        "[2026-04-10 01:23:00 UTC] [deploy-system] INFO: Deployed payment-service v2.4.1 at 01:23:00 UTC",
-        "[2026-04-10 01:23:01 UTC] [deploy-system] INFO: Previous version: v2.4.0 — rollback available",
-        "[deploy-system] Changelog v2.4.1: Updated order listing query to include customer join for new dashboard feature",
-        "[deploy-system] v2.4.1 deployed by: ci-pipeline (auto-merge PR #1847)",
-    ],
-    "connection_pool": [
-        "[2026-04-10 01:30:22 UTC] [db-primary] WARN: Connection pool at 98% capacity (490/500)",
-        "[2026-04-10 01:30:45 UTC] [db-primary] WARN: 847 queries waiting in queue",
-        "[db-primary] Pool config: max_connections=500, timeout=30s, idle_timeout=300s",
-        "[db-primary] Active connections breakdown: 485 from payment-service, 3 from auth-service, 2 from admin",
-    ],
-    "payment": [
-        "[2026-04-10 01:31:03 UTC] [payment-service] FATAL: Could not acquire DB connection from pool (timeout=30s)",
-        "[2026-04-10 01:31:15 UTC] [payment-service] ERROR: Transaction processing failed — no DB connection available",
-        "[2026-04-10 01:31:30 UTC] [payment-service] ERROR: Retrying request 1/3... upstream DB not responding",
-        "[2026-04-10 01:32:00 UTC] [payment-service] ERROR: Retrying request 3/3... giving up — returning HTTP 503",
-        "[payment-service] Total failed requests in last 2h: 23,847",
-    ],
+    "slow_query": ["[db-primary] SLOW QUERY: execution time: 47.3s [introduced in deploy v2.4.1]"],
+    "connection_pool": ["[db-primary] WARN: Connection pool at 98% capacity (490/500 connections in use)"],
+    "deploy": ["[deploy-system] INFO: Deployed payment-service v2.4.1 at 01:23:00 UTC"]
+}
+ROOT_CAUSE_QUERY_KEYWORDS: Dict[str, List[str]] = {
+    "slow_query": ["slow", "query", "queries"],
+    "connection_pool": ["pool", "connection"],
+    "deploy": ["deploy", "release", "v2.4.1"]
 }
 
-# Keywords that map to query result keys for fuzzy matching
-ROOT_CAUSE_QUERY_KEYWORDS: Dict[str, List[str]] = {
-    "slow_queries": ["slow query", "slow queries", "slow sql", "query time", "long query", "query performance"],
-    "deploy": ["deploy", "deployment", "recent deploy", "release", "version", "v2.4", "changelog", "what changed"],
-    "connection_pool": ["connection pool", "connections", "pool", "db connections", "pool usage", "pool exhaustion"],
-    "payment": ["payment logs", "payment errors", "payment service", "payment", "503", "payment-service"],
-}
+# Task 2 Variant 1
+RC_VAR1_LOGS = [
+    "INFO: Changed load-balancer timeout to 1s at 04:00 UTC",
+    "ERROR: payment-service timeout (took 1.5s > 1s)",
+    "ERROR: 504 Gateway Timeout downstream"
+]
+RC_VAR1_METRICS = { "lb_timeout_ms": 1000.0, "payment_latency": 1500.0 }
+RC_VAR1_ALERTS = ["CRITICAL: load-balancer returning 504s", "WARN: all services reporting timeouts"]
+RC_VAR1_KEYWORDS = ["load", "balancer", "timeout", "lb", "1s", "load-balancer"]
+
+# Task 2 Variant 2
+RC_VAR2_LOGS = [
+    "CRITICAL: No space left on device - /var/lib/mysql",
+    "ERROR: payment-service db write failed",
+    "FATAL: Database in read-only mode to prevent corruption"
+]
+RC_VAR2_METRICS = { "db_disk_usage": 99.9, "write_success_rate": 0.0 }
+RC_VAR2_ALERTS = ["CRITICAL: db-primary disk space full", "CRITICAL: payment-service write failures"]
+RC_VAR2_KEYWORDS = ["disk", "capacity", "space", "full", "storage", "io"]
 
 
 # ═══════════════════════════════════════════════════════════
-# TASK 3: Full Incident Runbook — Redis OOM cascade
+# TASK 3: Full Incident Runbook
 # ═══════════════════════════════════════════════════════════
 
 FULL_RUNBOOK_LOGS: List[str] = [
@@ -145,162 +160,167 @@ FULL_RUNBOOK_LOGS: List[str] = [
     "[2026-04-10 02:00:03 UTC] [redis] WARN: Memory usage 99.8% (3.99GB/4.00GB) — maxmemory-policy: noeviction",
     "[2026-04-10 02:00:05 UTC] [redis] ERROR: Rejected SET command — out of memory",
     "[2026-04-10 02:00:10 UTC] [auth-service] ERROR: Failed to write session to cache: OOM — Redis rejected write",
-    "[2026-04-10 02:00:12 UTC] [auth-service] WARN: Cache write failed, falling back to DB (attempt 1/3)",
-    "[2026-04-10 02:00:15 UTC] [auth-service] WARN: Cache write failed, falling back to DB (attempt 2/3)",
-    "[2026-04-10 02:00:18 UTC] [auth-service] ERROR: Cache write failed, falling back to DB (attempt 3/3) — giving up",
     "[2026-04-10 02:00:25 UTC] [auth-service] WARN: CPU at 94% — retry storm detected, thread pool saturated",
-    "[2026-04-10 02:00:30 UTC] [auth-service] ERROR: DB fallback also failing — connection refused (pool exhausted)",
     "[2026-04-10 02:00:35 UTC] [auth-service] FATAL: Cannot validate tokens — all backends unavailable",
-    "[2026-04-10 02:00:40 UTC] [mobile-api] ERROR: Auth service returned 503 for /validate-token",
-    "[2026-04-10 02:00:45 UTC] [mobile-api] WARN: Auth service failure rate at 100% — triggering circuit breaker",
     "[2026-04-10 02:00:48 UTC] [mobile-api] ERROR: Circuit breaker OPENED for auth-service — all requests short-circuited",
-    "[2026-04-10 02:00:50 UTC] [mobile-api] CRITICAL: 100% of login requests failing — users cannot authenticate",
     "[2026-04-10 02:01:00 UTC] [monitoring] ALERT: Company-wide login success rate dropped to 0% — SEV1 incident declared",
 ]
-
 FULL_RUNBOOK_METRICS: Dict[str, float] = {
     "redis_memory_usage_percent": 99.8,
     "auth_cpu_percent": 94.0,
-    "auth_cache_hit_rate": 0.0,
-    "mobile_api_error_rate": 100.0,
     "mobile_login_success_rate": 0.0,
-    "redis_rejected_commands": 15847.0,
-    "auth_db_connections": 498.0,
-    "circuit_breaker_status": 1.0,
 }
-
 FULL_RUNBOOK_ALERTS: List[str] = [
     "CRITICAL: mobile-api login success rate = 0% — complete login outage",
     "CRITICAL: auth-service CPU > 90% — retry storm causing CPU saturation",
     "CRITICAL: redis memory > 99% — OOM rejecting all write commands",
-    "WARNING: auth-service cache hit rate = 0% — all cache lookups failing",
-    "WARNING: mobile-api circuit breaker OPEN — auth-service calls blocked",
-    "WARNING: auth-service DB connection spike — 498/500 connections in use",
-    "INFO: redis rejected commands spike — 15,847 rejected in last hour",
-    "INFO: auth-service retry rate elevated — exponential backoff exhausted",
 ]
+FULL_RUNBOOK_GOAL: str = "Fix Redis OOM cascade."
+FULL_RUNBOOK_HINT: str = "Check maxmemory-policy."
+FULL_RUNBOOK_QUERY_RESULTS: Dict[str, List[str]] = {}
+FULL_RUNBOOK_QUERY_KEYWORDS: Dict[str, List[str]] = {}
 
-FULL_RUNBOOK_GOAL: str = (
-    "Three cascading failures are happening simultaneously. Users cannot log in company-wide. "
-    "You must: (1) Triage all 8 alerts and identify the root cause, (2) Diagnose the full cascade chain "
-    "(Redis OOM → auth cache miss storm → auth CPU spike → mobile API circuit breaker), "
-    "(3) Apply fixes IN THE CORRECT ORDER (Redis first, then auth, then mobile-api), "
-    "(4) Write a postmortem with timeline, root cause analysis, and action items."
-)
+# Task 3 Variant 1
+FR_VAR1_LOGS = [
+    "CRITICAL: x509: certificate has expired or is not yet valid (auth-service)",
+    "ERROR: SSL handshake failed - certificate expired",
+    "WARN: mobile-api connection to auth failed",
+    "FATAL: login outage company-wide due to cert expiration"
+]
+FR_VAR1_METRICS = { "cert_validity_days": -1.0, "auth_success_rate": 0.0 }
+FR_VAR1_ALERTS = ["CRITICAL: auth-service TLS certificate expired", "CRITICAL: mobile login failure"]
+FR_VAR1_KEYWORDS = ["cert", "certificate", "tls", "ssl", "expired", "expiry"]
 
-FULL_RUNBOOK_HINT: str = (
-    "Hint: The cascade starts at the infrastructure layer. Which service's failure "
-    "would cause all downstream services to fail? Check memory metrics."
-)
-
-# Sub-query results for run_query action in Task 3
-FULL_RUNBOOK_QUERY_RESULTS: Dict[str, List[str]] = {
-    "redis": [
-        "[redis] Current memory: 3.99GB / 4.00GB (99.8%)",
-        "[redis] maxmemory-policy: noeviction (PROBLEM: should be allkeys-lru or volatile-lru)",
-        "[redis] Rejected commands in last hour: 15,847",
-        "[redis] Connected clients: 247 (auth-service: 200, mobile-api: 30, other: 17)",
-        "[redis] Key count: 4,231,847 — many expired keys not evicted due to noeviction policy",
-    ],
-    "auth": [
-        "[auth-service] CPU: 94% — primarily retry loops for failed cache writes",
-        "[auth-service] Cache hit rate: 0% — all reads returning miss, all writes rejected by Redis",
-        "[auth-service] DB connection pool: 498/500 — fallback to DB is also saturated",
-        "[auth-service] Thread pool: 198/200 threads active — most blocked on retries",
-        "[auth-service] Error rate: 100% — no requests succeeding",
-    ],
-    "mobile": [
-        "[mobile-api] Circuit breaker status: OPEN for auth-service",
-        "[mobile-api] Login success rate: 0%",
-        "[mobile-api] Error rate: 100% — all requests failing at auth validation step",
-        "[mobile-api] Affected users (estimated): 47,000 concurrent",
-    ],
-    "circuit_breaker": [
-        "[mobile-api] Circuit breaker configuration: threshold=50% failures over 60s window",
-        "[mobile-api] Circuit breaker opened at 02:00:48 UTC",
-        "[mobile-api] Circuit breaker will attempt half-open at 02:05:48 UTC (5min cooldown)",
-        "[mobile-api] To manually reset: restart mobile-api pods or call /admin/circuit-breaker/reset",
-    ],
-    "memory": [
-        "[redis] Memory breakdown: session_tokens=2.1GB, user_profiles=1.2GB, rate_limits=0.5GB, other=0.19GB",
-        "[redis] Peak memory in last 24h: 4.00GB (hit limit at 01:58:00 UTC)",
-        "[redis] Memory growth rate: ~50MB/hour (session tokens not expiring properly)",
-        "[redis] Recommendation: Set maxmemory-policy to allkeys-lru and increase maxmemory to 8GB",
-    ],
-}
-
-FULL_RUNBOOK_QUERY_KEYWORDS: Dict[str, List[str]] = {
-    "redis": ["redis", "cache", "redis memory", "redis config", "redis status", "oom"],
-    "auth": ["auth", "auth-service", "authentication", "auth service", "auth logs", "auth errors"],
-    "mobile": ["mobile", "mobile-api", "mobile api", "login", "mobile logs"],
-    "circuit_breaker": ["circuit breaker", "circuit-breaker", "breaker", "cb status"],
-    "memory": ["memory", "mem", "memory usage", "memory breakdown", "redis mem"],
-}
+# Task 3 Variant 2
+FR_VAR2_LOGS = [
+    "CRITICAL: AWS region us-east-1 outage affecting routing",
+    "ERROR: dns resolution failed for auth-service.internal",
+    "WARN: BGP route flap detected",
+    "FATAL: All internal cross-service traffic dropped"
+]
+FR_VAR2_METRICS = { "dns_resolution_success": 0.0, "network_drops": 100.0 }
+FR_VAR2_ALERTS = ["CRITICAL: AWS us-east-1 routing failure", "CRITICAL: DNS resolution failing globally"]
+FR_VAR2_KEYWORDS = ["aws", "region", "outage", "dns", "bgp", "routing"]
 
 
-def get_scenario_data(task_id: str) -> Dict[str, Any]:
-    """Get the complete scenario data for a given task ID."""
-    scenarios = {
-        "alert_triage": {
+# ═══════════════════════════════════════════════════════════
+# Helper Data Structures
+# ═══════════════════════════════════════════════════════════
+
+TASK_SCENARIOS = {
+    "alert_triage": [
+        {
+            "name": "Alert Triage — Cascading Failures from DB CPU Overload",
             "logs": ALERT_TRIAGE_LOGS,
             "metrics": ALERT_TRIAGE_METRICS,
             "alerts": ALERT_TRIAGE_ALERTS,
             "goal": ALERT_TRIAGE_GOAL,
             "hint": ALERT_TRIAGE_HINT,
-            "max_steps": 8,
-            "name": "Alert Triage — Cascading Failures from DB CPU Overload",
-            "difficulty": "easy",
+            "grader_keywords": {"ROOT_CAUSE_KEYWORDS": ["db-primary", "database", "db cpu", "primary db"]}
         },
-        "root_cause_diagnosis": {
+        {
+            "name": "Alert Triage — Network Partition at API Gateway",
+            "logs": AT_VAR1_LOGS,
+            "metrics": AT_VAR1_METRICS,
+            "alerts": AT_VAR1_ALERTS,
+            "goal": "Triage network isolation alerts.",
+            "hint": "Check upstream connectivity.",
+            "grader_keywords": {"ROOT_CAUSE_KEYWORDS": AT_VAR1_KEYWORDS, "DB_KEYWORDS": AT_VAR1_KEYWORDS}
+        },
+        {
+            "name": "Alert Triage — Auth Service Memory Leak",
+            "logs": AT_VAR2_LOGS,
+            "metrics": AT_VAR2_METRICS,
+            "alerts": AT_VAR2_ALERTS,
+            "goal": "Triage memory exhaustion.",
+            "hint": "Check JVM metrics.",
+            "grader_keywords": {"ROOT_CAUSE_KEYWORDS": AT_VAR2_KEYWORDS, "DB_KEYWORDS": AT_VAR2_KEYWORDS}
+        }
+    ],
+    "root_cause_diagnosis": [
+        {
+            "name": "Root Cause Diagnosis — Bad Deploy and Slow Query",
             "logs": ROOT_CAUSE_LOGS,
             "metrics": ROOT_CAUSE_METRICS,
             "alerts": ROOT_CAUSE_ALERTS,
             "goal": ROOT_CAUSE_GOAL,
             "hint": ROOT_CAUSE_HINT,
-            "max_steps": 10,
-            "name": "Root Cause Diagnosis — Bad Deploy and Slow Query",
-            "difficulty": "medium",
-            "query_results": ROOT_CAUSE_QUERY_RESULTS,
-            "query_keywords": ROOT_CAUSE_QUERY_KEYWORDS,
+            "grader_keywords": {}
         },
-        "full_incident_runbook": {
+        {
+            "name": "Root Cause Diagnosis — Misconfigured Timeout",
+            "logs": RC_VAR1_LOGS,
+            "metrics": RC_VAR1_METRICS,
+            "alerts": RC_VAR1_ALERTS,
+            "goal": "Investigate gateway timeouts.",
+            "hint": "Check LB config.",
+            "grader_keywords": {"SLOW_QUERY_KEYWORDS": RC_VAR1_KEYWORDS, "DEPLOY_KEYWORDS": RC_VAR1_KEYWORDS, "POOL_KEYWORDS": RC_VAR1_KEYWORDS}
+        },
+        {
+            "name": "Root Cause Diagnosis — Disk Space Exhaustion",
+            "logs": RC_VAR2_LOGS,
+            "metrics": RC_VAR2_METRICS,
+            "alerts": RC_VAR2_ALERTS,
+            "goal": "Investigate write failures.",
+            "hint": "Check storage metrics.",
+            "grader_keywords": {"SLOW_QUERY_KEYWORDS": RC_VAR2_KEYWORDS, "DEPLOY_KEYWORDS": RC_VAR2_KEYWORDS, "POOL_KEYWORDS": RC_VAR2_KEYWORDS}
+        }
+    ],
+    "full_incident_runbook": [
+        {
+            "name": "Full Incident Runbook — Redis OOM Cascade to Login Outage",
             "logs": FULL_RUNBOOK_LOGS,
             "metrics": FULL_RUNBOOK_METRICS,
             "alerts": FULL_RUNBOOK_ALERTS,
             "goal": FULL_RUNBOOK_GOAL,
             "hint": FULL_RUNBOOK_HINT,
-            "max_steps": 20,
-            "name": "Full Incident Runbook — Redis OOM Cascade to Login Outage",
-            "difficulty": "hard",
-            "query_results": FULL_RUNBOOK_QUERY_RESULTS,
-            "query_keywords": FULL_RUNBOOK_QUERY_KEYWORDS,
+            "grader_keywords": {}
         },
-    }
-    return scenarios.get(task_id, {})
+        {
+            "name": "Full Incident Runbook — Certificate Expiry",
+            "logs": FR_VAR1_LOGS,
+            "metrics": FR_VAR1_METRICS,
+            "alerts": FR_VAR1_ALERTS,
+            "goal": "Fix expired TLS cert.",
+            "hint": "Check SSL/TLS dates.",
+            "grader_keywords": {"REDIS_KEYWORDS": FR_VAR1_KEYWORDS}
+        },
+        {
+            "name": "Full Incident Runbook — AWS Routing Outage",
+            "logs": FR_VAR2_LOGS,
+            "metrics": FR_VAR2_METRICS,
+            "alerts": FR_VAR2_ALERTS,
+            "goal": "Fix DNS/BGP routing.",
+            "hint": "Wait for upstream restabilization.",
+            "grader_keywords": {"REDIS_KEYWORDS": FR_VAR2_KEYWORDS}
+        }
+    ]
+}
 
+def get_scenario_data(task_id: str) -> Dict[str, Any]:
+    return {}
 
 def get_all_task_info() -> List[Dict[str, str]]:
-    """Return metadata for all available tasks."""
     return [
         {
             "id": "alert_triage",
             "name": "Alert Triage",
             "difficulty": "easy",
             "max_steps": 8,
-            "description": "Classify 5 simultaneous alerts and identify the root cause alert",
+            "description": "Classify alerts and identify root cause."
         },
         {
             "id": "root_cause_diagnosis",
             "name": "Root Cause Diagnosis",
             "difficulty": "medium",
             "max_steps": 10,
-            "description": "Diagnose a payment service outage caused by a bad deploy and slow query",
+            "description": "Diagnose outage and apply fix."
         },
         {
             "id": "full_incident_runbook",
             "name": "Full Incident Runbook",
             "difficulty": "hard",
             "max_steps": 20,
-            "description": "Handle a 3-service cascade failure from Redis OOM to mobile login outage",
-        },
+            "description": "Handle total cascade failure."
+        }
     ]

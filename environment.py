@@ -18,6 +18,14 @@ from models import (
 from tasks import TASK_REGISTRY
 from tasks.base_task import BaseTask
 
+def _clamp_score(score: float) -> float:
+    """
+    Validator requires scores strictly between 0 and 1 (exclusive).
+    0.0 and 1.0 are both invalid. Clamp to (0.001, 0.999).
+    """
+    return round(min(max(float(score), 0.001), 0.999), 4)
+
+
 
 class SREEnvironment:
     """
@@ -33,7 +41,7 @@ class SREEnvironment:
         self.step_rewards: List[float] = []
         self._initialized: bool = False
         self._last_observation: Optional[ObservationModel] = None
-        self._total_reward: float = 0.0
+        self._total_reward: float = 0.001
         self._recent_actions: List[Tuple[str, str]] = []
 
     def reset(self, task_id: str) -> ObservationModel:
@@ -61,7 +69,7 @@ class SREEnvironment:
         self.task_id = task_id
         self.episode_id = str(uuid.uuid4())
         self.step_rewards = []
-        self._total_reward = 0.0
+        self._total_reward = 0.001
         self._initialized = True
         self._recent_actions = []
 
@@ -97,7 +105,7 @@ class SREEnvironment:
         if self.current_task.done and self._last_observation is not None:
             return StepResultModel(
                 observation=self._last_observation,
-                reward=self._total_reward,
+                reward=_clamp_score(self._total_reward),
                 done=True,
                 success=self._total_reward >= 0.5,
                 info={"error": "Episode already completed. Call /reset to start new episode."},
@@ -137,7 +145,7 @@ class SREEnvironment:
             
             return StepResultModel(
                 observation=obs,
-                reward=self._total_reward,
+                reward=_clamp_score(self._total_reward),
                 done=done,
                 success=self._total_reward >= 0.5,
                 info={
@@ -162,7 +170,7 @@ class SREEnvironment:
 
         step_result = StepResultModel(
             observation=result["observation"],
-            reward=result["reward"],
+            reward=_clamp_score(result["reward"]),
             done=result["done"],
             success=result["success"],
             info=result["info"],

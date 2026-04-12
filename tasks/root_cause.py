@@ -20,6 +20,14 @@ from models import ActionModel, ObservationModel
 from tasks.base_task import BaseTask
 
 
+def _clamp_score(score: float) -> float:
+    """
+    Validator requires scores strictly between 0 and 1 (exclusive).
+    0.0 and 1.0 are both invalid. Clamp to (0.001, 0.999).
+    """
+    return round(min(max(float(score), 0.001), 0.999), 4)
+
+
 class RootCauseDiagnosisGrader(BaseGrader):
     """
     Grader for the Root Cause Diagnosis task.
@@ -281,7 +289,7 @@ class RootCauseDiagnosisTask(BaseTask):
             
             return {
                 "observation": obs,
-                "reward": effective_reward,
+                "reward": _clamp_score(effective_reward),
                 "done": done,
                 "success": self._peak_reward >= 0.5,
                 "info": {
@@ -289,10 +297,10 @@ class RootCauseDiagnosisTask(BaseTask):
                     "action_type": action.action_type,
                     "action_value": action.value,
                     "grade_message": grade_msg,
-                    "grader_breakdown": self.grader.breakdown,
+                    "grader_breakdown": {k: _clamp_score(v) for k, v in self.grader.breakdown.items()},
                     "reward_detail": {
-                        "total": effective_reward,
-                        "breakdown": self.grader.breakdown,
+                        "total": _clamp_score(effective_reward),
+                        "breakdown": {k: _clamp_score(v) for k, v in self.grader.breakdown.items()},
                         "message": f"Step {self.current_step}: noop/invalid action"
                     },
                     "error": None
@@ -305,6 +313,15 @@ class RootCauseDiagnosisTask(BaseTask):
             if result["reward"] > self._peak_reward:
                 self._peak_reward = result["reward"]
             result["success"] = self._peak_reward >= 0.5
+            
+            result["reward"] = _clamp_score(result["reward"])
+            if "info" in result:
+                if "grader_breakdown" in result["info"]:
+                    result["info"]["grader_breakdown"] = {k: _clamp_score(v) for k, v in result["info"]["grader_breakdown"].items()}
+                if "reward_detail" in result["info"]:
+                    result["info"]["reward_detail"]["total"] = _clamp_score(result["info"]["reward_detail"]["total"])
+                    if "breakdown" in result["info"]["reward_detail"]:
+                        result["info"]["reward_detail"]["breakdown"] = {k: _clamp_score(v) for k, v in result["info"]["reward_detail"]["breakdown"].items()}
             return result
         except Exception as e:
             self.current_step += 1
@@ -317,7 +334,7 @@ class RootCauseDiagnosisTask(BaseTask):
             
             return {
                 "observation": obs,
-                "reward": self.grader.total_reward,
+                "reward": _clamp_score(self.grader.total_reward),
                 "done": done,
                 "success": self._peak_reward >= 0.5,
                 "info": {
@@ -325,10 +342,10 @@ class RootCauseDiagnosisTask(BaseTask):
                     "action_type": action.action_type,
                     "action_value": action.value,
                     "grade_message": "Grader error — action recorded",
-                    "grader_breakdown": self.grader.breakdown,
+                    "grader_breakdown": {k: _clamp_score(v) for k, v in self.grader.breakdown.items()},
                     "reward_detail": {
-                        "total": self.grader.total_reward,
-                        "breakdown": self.grader.breakdown,
+                        "total": _clamp_score(self.grader.total_reward),
+                        "breakdown": {k: _clamp_score(v) for k, v in self.grader.breakdown.items()},
                         "message": f"Error: {str(e)}"
                     },
                     "error": None

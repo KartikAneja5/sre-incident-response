@@ -7,6 +7,14 @@ import re
 from typing import Dict, List, Tuple
 
 
+def _clamp_score(score: float) -> float:
+    """
+    Validator requires scores strictly between 0 and 1 (exclusive).
+    0.0 and 1.0 are both invalid. Clamp to (0.001, 0.999).
+    """
+    return round(min(max(float(score), 0.001), 0.999), 4)
+
+
 def matches_any(text: str, keywords: List[str]) -> bool:
     """
     Check if any keyword appears as a substring in the text (case-insensitive).
@@ -84,10 +92,10 @@ class BaseGrader:
         # Validator requires strictly between 0 and 1 (not 0.0 and not 1.0)
         clamped = max(0.0, min(1.0, raw))
         if clamped <= 0.0:
-            return 0.01
+            return _clamp_score(0.01)
         if clamped >= 1.0:
-            return 0.99
-        return clamped
+            return _clamp_score(0.99)
+        return _clamp_score(clamped)
 
     @property
     def breakdown(self) -> Dict[str, float]:

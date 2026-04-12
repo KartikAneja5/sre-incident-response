@@ -185,6 +185,90 @@ class FullIncidentRunbookTask(BaseTask):
             session_id=None
         )
 
+    def step(self, action: ActionModel) -> Dict[str, Any]:
+        if not hasattr(self, "VALID_ACTION_TYPES"):
+            self.VALID_ACTION_TYPES = {
+                "acknowledge_alert", "diagnose", "run_query",
+                "apply_fix", "escalate", "write_postmortem", "noop"
+            }
+        
+        if getattr(self, "_peak_reward", None) is None:
+            self._peak_reward = 0.0
+
+        if getattr(self, "grader", None) is None:
+            self.grader = self.create_grader()
+
+        # ── NOOP HANDLER — must never throw exception ──────────
+        if action.action_type not in self.VALID_ACTION_TYPES or action.action_type == "noop":
+            self.current_step += 1
+            noop_penalty = 0.02 if self.current_step > 5 else 0.0
+            
+            effective_reward = max(0.0, self.grader.total_reward - noop_penalty)
+            done = self.current_step >= self.max_steps or effective_reward >= 0.95
+            self.done = done
+            
+            grade_msg = "No action taken." if action.action_type == "noop" else f"Invalid action type: {action.action_type}"
+            
+            obs = self.get_initial_observation()
+            obs.current_step = self.current_step
+            obs.time_elapsed_seconds = self.time_elapsed
+            
+            return {
+                "observation": obs,
+                "reward": effective_reward,
+                "done": done,
+                "success": self._peak_reward >= 0.5,
+                "info": {
+                    "step": self.current_step,
+                    "action_type": action.action_type,
+                    "action_value": action.value,
+                    "grade_message": grade_msg,
+                    "grader_breakdown": self.grader.breakdown,
+                    "reward_detail": {
+                        "total": effective_reward,
+                        "breakdown": self.grader.breakdown,
+                        "message": f"Step {self.current_step}: noop/invalid action"
+                    },
+                    "error": None
+                }
+            }
+        # ── END NOOP HANDLER ───────────────────────────────────
+
+        try:
+            result = super().step(action)
+            if result["reward"] > self._peak_reward:
+                self._peak_reward = result["reward"]
+            result["success"] = self._peak_reward >= 0.5
+            return result
+        except Exception as e:
+            self.current_step += 1
+            done = self.current_step >= self.max_steps
+            self.done = done
+            
+            obs = self.get_initial_observation()
+            obs.current_step = self.current_step
+            obs.time_elapsed_seconds = self.time_elapsed
+            
+            return {
+                "observation": obs,
+                "reward": self.grader.total_reward,
+                "done": done,
+                "success": self._peak_reward >= 0.5,
+                "info": {
+                    "step": self.current_step,
+                    "action_type": action.action_type,
+                    "action_value": action.value,
+                    "grade_message": "Grader error — action recorded",
+                    "grader_breakdown": self.grader.breakdown,
+                    "reward_detail": {
+                        "total": self.grader.total_reward,
+                        "breakdown": self.grader.breakdown,
+                        "message": f"Error: {str(e)}"
+                    },
+                    "error": None
+                }
+            }
+
     def process_action(self, action: ActionModel) -> Tuple[ObservationModel, str]:
         obs = self.get_initial_observation()
         feedback = f"Action noted: {action.value[:100]}"

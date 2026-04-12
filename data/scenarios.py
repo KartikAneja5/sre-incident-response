@@ -45,60 +45,38 @@ ALERT_TRIAGE_ALERTS: List[str] = [
 ALERT_TRIAGE_GOAL: str = "Triage 5 alerts and find root cause."
 ALERT_TRIAGE_HINT: str = "Check the database metrics carefully."
 
-# Variant 1 (network_partition)
+# Variant 1 (memory_exhaustion cascade)
 AT_VAR1_LOGS = [
-    "CRITICAL: Connection refused to payment-service (attempt 1/3)",
-    "CRITICAL: Connection refused to auth-service",
-    "WARN: Network timeout to db-primary — 5000ms",
-    "FATAL: All upstream connections failing — serving 503s",
-    "WARN: No incoming requests for 3 minutes (isolated)",
-    "ALERT: api-gateway health check failing since 03:45 UTC",
+    "[2026-04-10 04:01:01 UTC] [auth-service] CRITICAL: Heap memory at 99.2% — JVM approaching OOM",
+    "[2026-04-10 04:01:03 UTC] [auth-service] WARN: GC overhead limit exceeded — 95% time in garbage collection",
+    "[2026-04-10 04:01:05 UTC] [auth-service] ERROR: OutOfMemoryError: Java heap space",
+    "[2026-04-10 04:01:08 UTC] [mobile-api] ERROR: auth-service returning 503 — upstream unavailable",
+    "[2026-04-10 04:01:11 UTC] [mobile-api] WARN: Login failure rate at 89% and rising",
+    "[2026-04-10 04:01:14 UTC] [mobile-api] ERROR: Circuit breaker OPEN for auth-service",
+    "[2026-04-10 04:01:16 UTC] [api-gateway] WARN: auth endpoint returning errors — degraded mode",
+    "[2026-04-10 04:01:18 UTC] [payment-service] WARN: Auth token validation failing — payment flows affected",
+    "[2026-04-10 04:01:20 UTC] [monitoring] ALERT: Login success rate dropped to 11%",
+    "[2026-04-10 04:01:22 UTC] [monitoring] ALERT: auth-service health check FAILING"
 ]
 
 AT_VAR1_METRICS = {
-  "api_gateway_error_rate": 98.5,
-  "api_gateway_upstream_failures": 3,
-  "payment_request_rate": 0.0,
-  "auth_request_rate": 0.0,
-  "db_cpu_percent": 12.0,
-  "network_packet_loss_percent": 87.3
+    "auth_heap_percent": 99.2,
+    "auth_gc_overhead_percent": 95.0,
+    "mobile_login_success_rate": 11.0,
+    "mobile_api_error_rate": 89.0,
+    "api_gateway_auth_error_rate": 87.5,
+    "payment_auth_failure_rate": 34.2
 }
 
 AT_VAR1_ALERTS = [
-    "CRITICAL: api-gateway upstream failure rate 98.5% [ROOT CAUSE]",
-    "CRITICAL: payment-service receiving 0 requests — isolated",
-    "WARNING: auth-service receiving 0 requests — isolated",
-    "WARNING: monitoring — db-primary unreachable from gateway",
-    "INFO: All service request rates dropped simultaneously",
+    "CRITICAL: auth-service heap memory > 99% — JVM OOM imminent",
+    "CRITICAL: mobile-api login success rate < 15% — user impact",
+    "WARNING: mobile-api circuit breaker OPEN — auth-service blocked",
+    "WARNING: api-gateway auth endpoint degraded — downstream impact",
+    "INFO: payment-service auth validation failing — token errors"
 ]
 
-AT_VAR1_KEYWORDS = ["api-gateway", "network", "connectivity", "upstream"]
-
-# Variant 2 (memory_exhaustion)
-AT_VAR2_LOGS = [
-    "CRITICAL: auth-service memory exhausted - OutOfMemoryError",
-    "WARN: auth-service heap usage at 99.9%",
-    "ERROR: api-gateway unable to validate tokens - upstream auth timeout",
-    "ERROR: mobile-api authentication failures cascading",
-    "FATAL: JVM crashed in auth-service container",
-]
-
-AT_VAR2_METRICS = {
-    "auth_heap_percent": 99.9,
-    "auth_gc_pause_ms": 15000.0,
-    "api_gateway_error_rate": 45.0,
-    "mobile_auth_failure_rate": 100.0,
-}
-
-AT_VAR2_ALERTS = [
-    "CRITICAL: auth-service heap memory > 99%",
-    "CRITICAL: mobile-api auth failure 100%",
-    "WARNING: api-gateway downstream latency spike",
-    "WARNING: auth-service GC pause time critical",
-    "INFO: general API degradation",
-]
-
-AT_VAR2_KEYWORDS = ["auth-service", "memory", "oom", "heap", "leak"]
+AT_VAR1_KEYWORDS = ["auth-service", "heap", "memory", "oom", "jvm", "out of memory"]
 
 # ═══════════════════════════════════════════════════════════
 # TASK 2: Root Cause Diagnosis
@@ -130,25 +108,36 @@ ROOT_CAUSE_QUERY_KEYWORDS: Dict[str, List[str]] = {
     "deploy": ["deploy", "release", "v2.4.1"]
 }
 
-# Task 2 Variant 1
+# Task 2 Variant 1 (Disk Space Exhaustion)
 RC_VAR1_LOGS = [
-    "INFO: Changed load-balancer timeout to 1s at 04:00 UTC",
-    "ERROR: payment-service timeout (took 1.5s > 1s)",
-    "ERROR: 504 Gateway Timeout downstream"
+    "[2026-04-10 02:15:01 UTC] [db-primary] CRITICAL: Disk usage at 99.1% — /var/lib/postgresql",
+    "[2026-04-10 02:15:03 UTC] [db-primary] ERROR: could not write to file: No space left on device",
+    "[2026-04-10 02:15:05 UTC] [db-primary] FATAL: WAL write failed — database entering read-only mode",
+    "[2026-04-10 02:15:08 UTC] [payment-service] ERROR: Transaction INSERT failed — database read-only",
+    "[2026-04-10 02:15:11 UTC] [payment-service] FATAL: Cannot process payments — DB in emergency mode",
+    "[2026-04-10 02:15:14 UTC] [monitoring] ALERT: Database write failures spiking — 847 errors/min",
+    "[2026-04-10 02:15:16 UTC] [db-primary] INFO: Archiving paused — no disk space for WAL segments",
+    "[2026-04-10 02:15:18 UTC] [payment-service] ERROR: Retry 1/3 — upstream DB not accepting writes",
+    "[2026-04-10 02:15:21 UTC] [payment-service] ERROR: Retry 2/3 — upstream DB not accepting writes",
+    "[2026-04-10 02:15:24 UTC] [payment-service] FATAL: All retries exhausted — returning HTTP 503"
 ]
-RC_VAR1_METRICS = { "lb_timeout_ms": 1000.0, "payment_latency": 1500.0 }
-RC_VAR1_ALERTS = ["CRITICAL: load-balancer returning 504s", "WARN: all services reporting timeouts"]
-RC_VAR1_KEYWORDS = ["load", "balancer", "timeout", "lb", "1s", "load-balancer"]
+RC_VAR1_METRICS = {
+    "db_disk_usage_percent": 99.1,
+    "db_write_error_rate": 847.0,
+    "payment_success_rate": 0.0,
+    "payment_error_rate": 100.0,
+    "db_wal_archive_lag_minutes": 127.0,
+    "db_connection_pool_usage": 45.0
+}
+RC_VAR1_ALERTS = [
+    "CRITICAL: db-primary disk usage > 99% — write failures imminent",
+    "CRITICAL: payment-service returning HTTP 503 — 0% success rate",
+    "WARNING: db-primary WAL archiving paused — disk full",
+    "WARNING: payment-service transaction failure rate 100%",
+    "INFO: db-primary entering read-only emergency mode"
+]
+RC_VAR1_KEYWORDS = ["disk", "capacity", "space", "full", "storage", "io"]
 
-# Task 2 Variant 2
-RC_VAR2_LOGS = [
-    "CRITICAL: No space left on device - /var/lib/mysql",
-    "ERROR: payment-service db write failed",
-    "FATAL: Database in read-only mode to prevent corruption"
-]
-RC_VAR2_METRICS = { "db_disk_usage": 99.9, "write_success_rate": 0.0 }
-RC_VAR2_ALERTS = ["CRITICAL: db-primary disk space full", "CRITICAL: payment-service write failures"]
-RC_VAR2_KEYWORDS = ["disk", "capacity", "space", "full", "storage", "io"]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -180,27 +169,6 @@ FULL_RUNBOOK_HINT: str = "Check maxmemory-policy."
 FULL_RUNBOOK_QUERY_RESULTS: Dict[str, List[str]] = {}
 FULL_RUNBOOK_QUERY_KEYWORDS: Dict[str, List[str]] = {}
 
-# Task 3 Variant 1
-FR_VAR1_LOGS = [
-    "CRITICAL: x509: certificate has expired or is not yet valid (auth-service)",
-    "ERROR: SSL handshake failed - certificate expired",
-    "WARN: mobile-api connection to auth failed",
-    "FATAL: login outage company-wide due to cert expiration"
-]
-FR_VAR1_METRICS = { "cert_validity_days": -1.0, "auth_success_rate": 0.0 }
-FR_VAR1_ALERTS = ["CRITICAL: auth-service TLS certificate expired", "CRITICAL: mobile login failure"]
-FR_VAR1_KEYWORDS = ["cert", "certificate", "tls", "ssl", "expired", "expiry"]
-
-# Task 3 Variant 2
-FR_VAR2_LOGS = [
-    "CRITICAL: AWS region us-east-1 outage affecting routing",
-    "ERROR: dns resolution failed for auth-service.internal",
-    "WARN: BGP route flap detected",
-    "FATAL: All internal cross-service traffic dropped"
-]
-FR_VAR2_METRICS = { "dns_resolution_success": 0.0, "network_drops": 100.0 }
-FR_VAR2_ALERTS = ["CRITICAL: AWS us-east-1 routing failure", "CRITICAL: DNS resolution failing globally"]
-FR_VAR2_KEYWORDS = ["aws", "region", "outage", "dns", "bgp", "routing"]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -216,25 +184,22 @@ TASK_SCENARIOS = {
             "alerts": ALERT_TRIAGE_ALERTS,
             "goal": ALERT_TRIAGE_GOAL,
             "hint": ALERT_TRIAGE_HINT,
+            "available_actions_hint": "Use acknowledge_alert and diagnose — not run_query — for triage tasks",
             "grader_keywords": {"ROOT_CAUSE_KEYWORDS": ["db-primary", "database", "db cpu", "primary db"]}
         },
         {
-            "name": "Alert Triage — Network Partition at API Gateway",
+            "name": "Alert Triage — Memory Exhaustion Cascade",
             "logs": AT_VAR1_LOGS,
             "metrics": AT_VAR1_METRICS,
             "alerts": AT_VAR1_ALERTS,
-            "goal": "Triage network isolation alerts.",
-            "hint": "Check upstream connectivity.",
-            "grader_keywords": {"ROOT_CAUSE_KEYWORDS": AT_VAR1_KEYWORDS, "DB_KEYWORDS": AT_VAR1_KEYWORDS}
-        },
-        {
-            "name": "Alert Triage — Auth Service Memory Leak",
-            "logs": AT_VAR2_LOGS,
-            "metrics": AT_VAR2_METRICS,
-            "alerts": AT_VAR2_ALERTS,
-            "goal": "Triage memory exhaustion.",
-            "hint": "Check JVM metrics.",
-            "grader_keywords": {"ROOT_CAUSE_KEYWORDS": AT_VAR2_KEYWORDS, "DB_KEYWORDS": AT_VAR2_KEYWORDS}
+            "goal": "You are an on-call SRE engineer. 5 alerts are firing. You must: (1) Use acknowledge_alert to acknowledge the most critical alert first, (2) Use diagnose to classify each alert as P1/P2/P3 and identify the root cause, (3) Explain the cascading failure pattern.",
+            "hint": "Look at which service has the most severe resource metric. That service is the root cause. Use acknowledge_alert and diagnose — not run_query.",
+            "available_actions_hint": "Use acknowledge_alert and diagnose — not run_query — for triage tasks",
+            "grader_keywords": {
+                "ROOT_CAUSE_KEYWORDS": ["auth-service", "heap", "memory", "oom", "jvm", "out of memory"],
+                "CASCADE_KEYWORDS": ["cascade", "downstream", "circuit breaker", "login", "mobile"],
+                "DB_KEYWORDS": ["auth-service", "heap", "memory", "oom", "jvm", "out of memory"]
+            }
         }
     ],
     "root_cause_diagnosis": [
@@ -245,25 +210,31 @@ TASK_SCENARIOS = {
             "alerts": ROOT_CAUSE_ALERTS,
             "goal": ROOT_CAUSE_GOAL,
             "hint": ROOT_CAUSE_HINT,
+            "available_actions_hint": "Use acknowledge_alert and diagnose — not run_query — for triage tasks",
             "grader_keywords": {}
         },
         {
-            "name": "Root Cause Diagnosis — Misconfigured Timeout",
+            "name": "Root Cause Diagnosis — Disk Space Exhaustion",
             "logs": RC_VAR1_LOGS,
             "metrics": RC_VAR1_METRICS,
             "alerts": RC_VAR1_ALERTS,
-            "goal": "Investigate gateway timeouts.",
-            "hint": "Check LB config.",
-            "grader_keywords": {"SLOW_QUERY_KEYWORDS": RC_VAR1_KEYWORDS, "DEPLOY_KEYWORDS": RC_VAR1_KEYWORDS, "POOL_KEYWORDS": RC_VAR1_KEYWORDS}
-        },
-        {
-            "name": "Root Cause Diagnosis — Disk Space Exhaustion",
-            "logs": RC_VAR2_LOGS,
-            "metrics": RC_VAR2_METRICS,
-            "alerts": RC_VAR2_ALERTS,
-            "goal": "Investigate write failures.",
-            "hint": "Check storage metrics.",
-            "grader_keywords": {"SLOW_QUERY_KEYWORDS": RC_VAR2_KEYWORDS, "DEPLOY_KEYWORDS": RC_VAR2_KEYWORDS, "POOL_KEYWORDS": RC_VAR2_KEYWORDS}
+            "goal": "Payment service is completely down. Investigate using run_query to find the root cause, then diagnose and apply the correct fix.",
+            "hint": "Check the database metrics carefully. Use run_query to investigate disk space, recent errors, and database status.",
+            "available_actions_hint": "Use acknowledge_alert and diagnose — not run_query — for triage tasks",
+            "query_responses": {
+                "disk": "df -h shows /var/lib/postgresql at 99.1% (487GB/491GB). WAL logs accumulated: 23GB. Old backups: 31GB.",
+                "disk space": "df -h shows /var/lib/postgresql at 99.1% (487GB/491GB). WAL logs accumulated: 23GB. Old backups: 31GB.",
+                "database": "PostgreSQL in read-only emergency mode. Last successful write: 02:15:00 UTC. Disk full error since 02:14:58 UTC.",
+                "wal": "WAL archive lag: 127 minutes. 847 failed WAL segments. Archive destination: /var/lib/postgresql/archive — FULL.",
+                "payment logs": "payment-service: FATAL: Cannot INSERT — database read-only mode. 100% failure rate since 02:15:08 UTC.",
+                "errors": "db-primary: 847 write errors/min. Error: could not write to file — No space left on device."
+            },
+            "grader_keywords": {
+                "SLOW_QUERY_KEYWORDS": ["disk", "disk space", "disk full", "storage", "no space", "99%"],
+                "DEPLOY_KEYWORDS": ["wal", "archive", "log", "backup", "accumulated"],
+                "FIX_KEYWORDS": ["clean", "delete", "remove", "free space", "disk space", "truncate", "archive"],
+                "POOL_KEYWORDS": ["wal", "archive", "log", "backup", "accumulated"]
+            }
         }
     ],
     "full_incident_runbook": [
@@ -274,25 +245,8 @@ TASK_SCENARIOS = {
             "alerts": FULL_RUNBOOK_ALERTS,
             "goal": FULL_RUNBOOK_GOAL,
             "hint": FULL_RUNBOOK_HINT,
+            "available_actions_hint": "Use acknowledge_alert and diagnose — not run_query — for triage tasks",
             "grader_keywords": {}
-        },
-        {
-            "name": "Full Incident Runbook — Certificate Expiry",
-            "logs": FR_VAR1_LOGS,
-            "metrics": FR_VAR1_METRICS,
-            "alerts": FR_VAR1_ALERTS,
-            "goal": "Fix expired TLS cert.",
-            "hint": "Check SSL/TLS dates.",
-            "grader_keywords": {"REDIS_KEYWORDS": FR_VAR1_KEYWORDS}
-        },
-        {
-            "name": "Full Incident Runbook — AWS Routing Outage",
-            "logs": FR_VAR2_LOGS,
-            "metrics": FR_VAR2_METRICS,
-            "alerts": FR_VAR2_ALERTS,
-            "goal": "Fix DNS/BGP routing.",
-            "hint": "Wait for upstream restabilization.",
-            "grader_keywords": {"REDIS_KEYWORDS": FR_VAR2_KEYWORDS}
         }
     ]
 }
